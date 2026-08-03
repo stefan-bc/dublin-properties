@@ -54,7 +54,15 @@ PPR CSV (weekly)  →  GitHub Action (scripts/ingest.mjs)  →  Supabase Postgre
   matches come from a small list already held in memory (zero network round
   trip), address matches follow ~120ms later from a pg_trgm word-similarity
   query (a `search_sales` RPC) — typo-tolerant, since PPR addresses are
-  free-text and rarely match exactly how people type them.
+  free-text and rarely match exactly how people type them. The RPC bakes the
+  term into its query as a literal (PostgREST passes arguments as prepared
+  parameters, which pg_trgm's GIN operators can't be planned against, forcing
+  a full-table scan), so suggestions run off the trigram index. Terms that
+  match a postal district at all — "dublin" and its substrings appear in
+  nearly every address — are answered entirely by the in-memory district
+  list, and skip the RPC: for those, word-similarity over ~250k rows is a
+  sequential-scan-scale cost with no better result than the district
+  dropdown already gives.
   Clicking an address (a suggestion, or any row in the results table) shows
   its full sale history, property type, size, Eircode, and district — always
   labeled, never silently blank — plus a Google Maps link. Charts and stat
@@ -163,5 +171,6 @@ CI (`.github/workflows/ci.yml`) runs both on every push/PR.
 - [x] First ingest run — 249,311 Dublin rows loaded, verified end-to-end in a real browser
 - [x] Deployed to Cloudflare Pages — live at `dublin-properties.pages.dev`, connected to this repo, auto-deploys on push to `main`
 - [ ] Custom domain `dublin.ectoplasma.org` attached (zone already exists in the same Cloudflare account, not yet wired up)
-- [x] Filtered view now computed server-side over all matching rows (`sales_stats` RPC) — code committed; live DB needs one re-run of `supabase/schema.sql` (also applies the `search_sales` fix)
+- [x] Filtered view now computed server-side over all matching rows (`sales_stats` RPC)
+- [x] `search_sales` rewritten to use the trigram GIN index (dynamic SQL); district terms answered client-side
 - [x] Analysis layer: `analysis/generate-report.mjs`, `data.json`, charts, and `analysis/dublin-housing-report.md`
