@@ -11,15 +11,25 @@ const REST_HEADERS = { apikey: SUPABASE_ANON_KEY };
 // Content-Range response header) in the same request as the capped page of
 // rows — one round trip, not two. Needed so a capped result set can still
 // show its real total instead of just the page size (see runFilteredView).
-async function pg(table, params, { exactCount = false } = {}) {
+// `signal` lets a caller abort a superseded request (an older search is still
+// hogging a browser connection slot while the newest keystroke's query is
+// queued behind it); an aborted request resolves to a silent no-op so no
+// caller has to special-case it — the viewRequestId guards already make
+// stale results harmless.
+async function pg(table, params, { exactCount = false, signal } = {}) {
   const qs = new URLSearchParams(params).toString();
   const headers = exactCount ? { ...REST_HEADERS, Prefer: 'count=exact' } : REST_HEADERS;
-  const res = await fetch(`${REST_URL}/${table}?${qs}`, { headers });
-  if (!res.ok) return { data: null, error: await res.text(), count: null };
-  const data = await res.json();
-  if (!exactCount) return { data, error: null, count: null };
-  const total = res.headers.get('content-range')?.split('/')[1];
-  return { data, error: null, count: total && total !== '*' ? Number.parseInt(total, 10) : data.length };
+  try {
+    const res = await fetch(`${REST_URL}/${table}?${qs}`, { headers, signal });
+    if (!res.ok) return { data: null, error: await res.text(), count: null };
+    const data = await res.json();
+    if (!exactCount) return { data, error: null, count: null };
+    const total = res.headers.get('content-range')?.split('/')[1];
+    return { data, error: null, count: total && total !== '*' ? Number.parseInt(total, 10) : data.length };
+  } catch (e) {
+    if (e.name === 'AbortError') return { data: null, error: null, count: null };
+    throw e;
+  }
 }
 
 const eur = new Intl.NumberFormat('en-IE', {
@@ -152,6 +162,17 @@ let suggestionRequestId = 0;
 // an older response that resolves later is discarded rather than clobbering
 // the screen with stale data.
 let viewRequestId = 0;
+// AbortControllers for the two request families (the view queries and the
+// address-suggestion query). A new keystroke aborts the previous in-flight
+// request of its family so a slow stale one can't hold a connection slot or
+// queue the newest query behind it (browsers cap ~6 concurrent requests per
+// origin) — see pg()'s signal handling.
+let viewAbort = null;
+let suggestAbort = null;
+// The default view's payload is cached after the first load — it only changes
+// on the weekly ingest, and clearing a search (or clicking the title) calls
+// loadDefaultView again, so re-fetching five views each time is pure waste.
+let defaultViewCache = null;
 
 function districtSynonyms(label) {
   const syns = [label.toLowerCase()];
@@ -213,19 +234,31 @@ function tooltipBase() {
   };
 }
 
+// Updates an existing Chart instance in place instead of destroying it and
+// building a new one from scratch. Destroy+recreate is the dominant cost of a
+// search render (canvas teardown + full re-layout + reanimation of every
+// chart) — reuse + an animation-free update makes a keystroke's new results
+// snap in. Only the very first render of each chart animates (the default
+// 450ms), which keeps the initial-load flourish without taxing every search.
+function upsertChart(existing, ctx, config) {
+  if (existing) {
+    existing.data = config.data;
+    existing.options = config.options;
+    existing.update('none');
+    return existing;
+  }
+  return new Chart(ctx, config);
+}
+
 function renderQuarterly(rows) {
   const ctx = document.getElementById('chart-quarterly');
-  const labels = rows.map((r) => quarterFmt(r.quarter));
-  const data = rows.map((r) => Math.round(r.median_price));
-
-  if (quarterlyChart) quarterlyChart.destroy();
-  quarterlyChart = new Chart(ctx, {
+  quarterlyChart = upsertChart(quarterlyChart, ctx, {
     type: 'line',
     data: {
-      labels,
+      labels: rows.map((r) => quarterFmt(r.quarter)),
       datasets: [
         {
-          data,
+          data: rows.map((r) => Math.round(r.median_price)),
           borderColor: palette.series1,
           backgroundColor: palette.series1 + '1a',
           borderWidth: 2,
@@ -258,17 +291,13 @@ function renderQuarterly(rows) {
 function renderDistrict(rows) {
   const ctx = document.getElementById('chart-district');
   const sorted = [...rows].sort((a, b) => b.median_price - a.median_price);
-  const labels = sorted.map((r) => r.postal_district);
-  const data = sorted.map((r) => Math.round(r.median_price));
-
-  if (districtChart) districtChart.destroy();
-  districtChart = new Chart(ctx, {
+  districtChart = upsertChart(districtChart, ctx, {
     type: 'bar',
     data: {
-      labels,
+      labels: sorted.map((r) => r.postal_district),
       datasets: [
         {
-          data,
+          data: sorted.map((r) => Math.round(r.median_price)),
           backgroundColor: palette.series1,
           borderRadius: 4,
           maxBarThickness: 18,
@@ -398,11 +427,15 @@ function renderMap(rows) {
   svg.setAttribute('viewBox', `0 0 ${maxX - minX} ${maxY - minY}`);
   svg.replaceChildren();
 
+  // District geometry never changes — compute each path's `d` string once
+  // instead of re-serialising every polygon on every search re-render.
+  const pathDataCache = renderMap.pathDataCache ?? (renderMap.pathDataCache = {});
+
   for (const [key, polys] of Object.entries(districts)) {
     const row = byKey.get(key);
     const label = districtLabelFromKey(key);
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', districtPathData(polys, bbox));
+    path.setAttribute('d', (pathDataCache[key] ??= districtPathData(polys, bbox)));
     path.setAttribute('fill-rule', 'evenodd');
     path.setAttribute('tabindex', '0');
     path.setAttribute('role', 'button');
@@ -442,17 +475,13 @@ function renderMap(rows) {
 
 function renderType(rows) {
   const ctx = document.getElementById('chart-type');
-  const labels = rows.map((r) => propertyTypeLabel(r.property_type));
-  const data = rows.map((r) => Math.round(r.median_price));
-
-  if (typeChart) typeChart.destroy();
-  typeChart = new Chart(ctx, {
+  typeChart = upsertChart(typeChart, ctx, {
     type: 'bar',
     data: {
-      labels,
+      labels: rows.map((r) => propertyTypeLabel(r.property_type)),
       datasets: [
         {
-          data,
+          data: rows.map((r) => Math.round(r.median_price)),
           backgroundColor: [palette.series1, palette.series2],
           borderRadius: 4,
           maxBarThickness: 48,
@@ -513,17 +542,13 @@ function setChartsMode(mode, rows = []) {
 function renderAddressPriceChart(rows) {
   const sorted = [...rows].sort((a, b) => new Date(a.sale_date) - new Date(b.sale_date));
   const ctx = document.getElementById('chart-quarterly');
-  const labels = sorted.map((r) => r.sale_date);
-  const data = sorted.map((r) => r.price);
-
-  if (quarterlyChart) quarterlyChart.destroy();
-  quarterlyChart = new Chart(ctx, {
+  quarterlyChart = upsertChart(quarterlyChart, ctx, {
     type: 'line',
     data: {
-      labels,
+      labels: sorted.map((r) => r.sale_date),
       datasets: [
         {
-          data,
+          data: sorted.map((r) => r.price),
           borderColor: palette.series1,
           backgroundColor: palette.series1 + '1a',
           borderWidth: 2,
@@ -631,7 +656,7 @@ function renderTable(rows, cap, trueTotal) {
   body.replaceChildren();
   rows.forEach((r, i) => {
     const tr = document.createElement('tr');
-    tr.style.animationDelay = `${Math.min(i, 20) * 12}ms`;
+    tr.style.animationDelay = `${Math.min(i, 12) * 8}ms`;
 
     const dateTd = document.createElement('td');
     dateTd.textContent = r.sale_date;
@@ -681,6 +706,8 @@ function renderTable(rows, cap, trueTotal) {
 
 async function loadDefaultView() {
   const requestId = ++viewRequestId;
+  viewAbort?.abort();
+  viewAbort = new AbortController();
   document.getElementById('table-heading').textContent = 'Recent sales';
   document.getElementById('result-note').textContent = '';
   document.getElementById('address-detail').hidden = true;
@@ -688,40 +715,50 @@ async function loadDefaultView() {
   document.getElementById('stats').classList.add('is-loading');
   setViewLoading(true);
 
-  const [summaryRes, quarterly, district, type, recent] = await Promise.all([
-    pg('sales_summary', { select: '*' }),
-    pg('sales_quarterly', { select: '*' }),
-    pg('sales_by_district', { select: '*' }),
-    pg('sales_by_type', { select: '*' }),
-    pg('sales', {
-      select: 'sale_date,address,postal_district,eircode,property_type,price,size_description,vat_exclusive,not_full_market_price',
-      order: 'sale_date.desc',
-      limit: RECENT_LIMIT,
-    }),
-  ]);
-  if (requestId !== viewRequestId) return; // a newer view request has since started
+  if (!defaultViewCache) {
+    const signal = viewAbort.signal;
+    const [summaryRes, quarterly, district, type, recent] = await Promise.all([
+      pg('sales_summary', { select: '*' }, { signal }),
+      pg('sales_quarterly', { select: '*' }, { signal }),
+      pg('sales_by_district', { select: '*' }, { signal }),
+      pg('sales_by_type', { select: '*' }, { signal }),
+      pg('sales', {
+        select: 'sale_date,address,postal_district,eircode,property_type,price,size_description,vat_exclusive,not_full_market_price',
+        order: 'sale_date.desc',
+        limit: RECENT_LIMIT,
+      }, { signal }),
+    ]);
+    if (requestId !== viewRequestId) return; // a newer view request has since started
+    defaultViewCache = {
+      summary: summaryRes.data?.[0],
+      quarterly: quarterly.data || [],
+      district: district.data || [],
+      type: type.data || [],
+      recent: recent.data || [],
+    };
+  }
 
-  const summary = summaryRes.data?.[0];
+  const { summary, quarterly, district, type, recent } = defaultViewCache;
   if (summary) {
     setStat('stat-total', summary.total_sales.toLocaleString());
     setStat('stat-median', eur.format(summary.median_price));
-    setStat('stat-newbuild', `${newBuildShareFromCounts(type.data || [])}%`);
+    setStat('stat-newbuild', `${newBuildShareFromCounts(type)}%`);
     setStat('stat-latest', summary.latest_sale_date);
   }
 
   setChartsMode('aggregate');
-  renderQuarterly(quarterly.data || []);
-  renderDistrict(district.data || []);
-  renderMap(district.data || []);
-  renderType(mergeTypeRows(type.data || []));
-  renderTable(recent.data || [], RECENT_LIMIT);
+  renderQuarterly(quarterly);
+  renderDistrict(district);
+  renderMap(district);
+  renderType(mergeTypeRows(type));
+  renderTable(recent, RECENT_LIMIT);
 
-  districtOptions = (district.data || []).map((d) => ({
+  districtOptions = district.map((d) => ({
     label: d.postal_district,
     sale_count: d.sale_count,
     synonyms: districtSynonyms(d.postal_district),
   }));
-  typeOptions = buildTypeOptions(type.data || []);
+  typeOptions = buildTypeOptions(type);
   populateFilterSelects();
 
   document.getElementById('stats').classList.remove('is-loading');
@@ -805,6 +842,8 @@ function applyStatsPayload(agg) {
 // a stale search instead of the active view).
 async function runFilteredView() {
   const requestId = ++viewRequestId;
+  viewAbort?.abort();
+  viewAbort = new AbortController();
   const term = searchInput.value.trim();
   const district = districtSelect.value;
   const type = typeSelect.value;
@@ -815,47 +854,49 @@ async function runFilteredView() {
     return;
   }
 
-  setViewLoading(true);
-
-  // The filter goes to sales_stats as bound parameters — the SQL owns the
+  // The filter goes to the sales_stats RPC as arguments — the SQL owns the
   // matching, medians and series (see supabase/schema.sql) — and the whole
   // view renders from that one payload, so nothing here can disagree with
-  // the table. "type" is a merged label ("New Build"); expand it to every
-  // raw source string that folds into it (see PROPERTY_TYPE_LABELS),
-  // including the Irish-language variants, and pass them '|'-joined.
+  // the table. The previous results stay on screen until this response
+  // lands (no loading dim: for search-as-you-type the old rows are the best
+  // placeholder, and the new ones simply swell in). "type" is a merged label
+  // ("New Build"); expand it to every raw source string that folds into it
+  // (see PROPERTY_TYPE_LABELS), including the Irish-language variants, and
+  // pass them '|'-joined.
   const typeGroup = type ? typeOptions.find((t) => t.label === type) : null;
-  const { data, error } = await pg('rpc/sales_stats', {
-    p_term: term || null,
-    p_district: district || null,
-    p_types: typeGroup ? typeGroup.values.join('|') : null,
-    p_include_non_market: includeNonMarket,
-  });
+  const { data, error } = await pg(
+    'rpc/sales_stats',
+    {
+      p_term: term || null,
+      p_district: district || null,
+      p_types: typeGroup ? typeGroup.values.join('|') : null,
+      p_include_non_market: includeNonMarket,
+    },
+    { signal: viewAbort.signal },
+  );
   if (requestId !== viewRequestId) return; // superseded by a newer view request
   if (error) {
     console.error(error);
-    setViewLoading(false);
     return;
   }
 
   const agg = data[0];
-  if (!agg) {
-    setViewLoading(false);
-    return;
-  }
+  if (!agg) return;
 
   document.getElementById('table-heading').textContent = buildFilterHeading(term, district, type);
   renderTable(agg.rows, RESULT_LIMIT, agg.total);
   applyStatsPayload(agg);
-  setViewLoading(false);
+  setViewLoading(false); // clears the initial-load dim if this search overtook it
 }
 
 async function runAddressHistory(address) {
   const requestId = ++viewRequestId;
+  viewAbort?.abort();
+  viewAbort = new AbortController();
   debouncedFilteredView.cancel(); // an in-flight debounced search must not fire later and kick us back out
   hideSuggestions();
   searchInput.value = address;
   toggleClearButton();
-  setViewLoading(true);
 
   const { data, error, count } = await pg(
     'sales',
@@ -865,19 +906,18 @@ async function runAddressHistory(address) {
       order: 'sale_date.desc',
       limit: RESULT_LIMIT,
     },
-    { exactCount: true },
+    { exactCount: true, signal: viewAbort.signal },
   );
   if (requestId !== viewRequestId) return; // superseded by a newer view request
   if (error) {
     console.error(error);
-    setViewLoading(false);
     return;
   }
   document.getElementById('table-heading').textContent = `Sale history: ${address}`;
   applyResultSet(data, RESULT_LIMIT, count);
   setChartsMode('address', data);
   renderAddressDetail(data);
-  setViewLoading(false);
+  setViewLoading(false); // clears the initial-load dim if this request overtook it
 }
 
 function debounce(fn, ms) {
@@ -899,7 +939,10 @@ const typeSelect = document.getElementById('filter-type');
 mapWrapEl = document.getElementById('map-wrap');
 mapTooltipEl = document.getElementById('map-tooltip');
 
-const debouncedFilteredView = debounce(runFilteredView, 300);
+// 100ms: tight enough that results follow the typing hand (search-as-you-type)
+// without firing a query mid-word on every keystroke. The queries are cheap
+// now (GIN-backed), and superseded requests are aborted rather than queued.
+const debouncedFilteredView = debounce(runFilteredView, 100);
 
 function toggleClearButton() {
   clearButton.hidden = searchInput.value.length === 0;
@@ -929,6 +972,8 @@ function matchDistricts(term) {
 
 const fetchAddressSuggestions = debounce(async (term) => {
   const requestId = ++suggestionRequestId;
+  suggestAbort?.abort();
+  suggestAbort = new AbortController();
   const q = term.trim();
   if (!q) return;
 
@@ -946,9 +991,13 @@ const fetchAddressSuggestions = debounce(async (term) => {
 
   // The term goes straight to the RPC as a bound parameter — no PostgREST
   // filter syntax is built here, so no escaping (or injection) is involved.
-  const { data, error } = await pg('rpc/search_sales', { search_term: q, max_results: 30 });
+  const { data, error } = await pg(
+    'rpc/search_sales',
+    { search_term: q, max_results: 30 },
+    { signal: suggestAbort.signal },
+  );
 
-  if (error || requestId !== suggestionRequestId) return;
+  if (error || !data || requestId !== suggestionRequestId) return;
 
   const seen = new Map();
   for (const row of data) {

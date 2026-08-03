@@ -617,7 +617,7 @@ th.num {
 
 tbody tr {
   transition: background-color 120ms ease;
-  animation: row-in 240ms ease-out both;
+  animation: row-in 180ms ease-out both;
 }
 
 tbody tr:hover {
