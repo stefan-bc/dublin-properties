@@ -154,35 +154,49 @@ a {
   position: absolute;
   right: 34px;
   top: 50%;
-  width: 48px;
-  height: 4px;
-  margin-top: -2px;
+  height: 5px;
+  margin-top: -2.5px;
+  display: flex;
+  gap: 3px;
   pointer-events: none;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
+}
+
+.search-status-spinner,
+.search-status-spinner::before,
+.search-status-spinner::after {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--scale-high);
+  animation: search-status-bounce 1.1s ease-in-out infinite;
+}
+
+/* Pseudo-elements become the first and third dots; stagger their bounce so
+   the trio reads as one wave travelling left to right. */
+.search-status-spinner::before {
+  content: '';
+  animation-delay: 0s;
 }
 
 .search-status-spinner {
-  display: block;
-  width: 40%;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(
-    90deg,
-    rgba(95, 168, 245, 0.15),
-    var(--scale-high) 50%,
-    rgba(95, 168, 245, 0.15)
-  );
-  animation: search-status-sweep 1.1s ease-in-out infinite;
+  animation-delay: 0.18s;
 }
 
-@keyframes search-status-sweep {
-  from {
-    transform: translateX(-130%);
+.search-status-spinner::after {
+  content: '';
+  animation-delay: 0.36s;
+}
+
+@keyframes search-status-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.55;
   }
-  to {
-    transform: translateX(330%);
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
   }
 }
 
