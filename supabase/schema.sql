@@ -23,6 +23,7 @@ create index if not exists sales_sale_date_idx on sales (sale_date);
 create index if not exists sales_postal_district_idx on sales (postal_district);
 create index if not exists sales_address_trgm_idx on sales using gin (address gin_trgm_ops);
 create index if not exists sales_eircode_trgm_idx on sales using gin (eircode gin_trgm_ops);
+create index if not exists sales_postal_district_trgm_idx on sales using gin (postal_district gin_trgm_ops);
 
 alter table sales enable row level security;
 
@@ -138,9 +139,15 @@ grant execute on function search_sales(text, integer) to anon, authenticated;
 -- p_types is a '|'-joined list of raw property_type values (the JS side
 -- expands a merged label like "New Build" into every raw source string,
 -- including the Irish-language variants). p_term matches address/Eircode/
--- district as ilike substrings — the term is a bound parameter and %/_/\ are
--- escaped as literals, so it can't widen its own match. Runs as the invoker,
--- so RLS's public read policy applies. Called by app.js runFilteredView.
+-- district as ilike substrings. Like search_sales, the term and every other
+-- filter value are baked into the query as %L literals rather than bound
+-- parameters: PostgREST passes RPC arguments as prepared-statement
+-- parameters, and pg_trgm's GIN operators can only be planned against a
+-- constant, so a bound term would force a sequential scan of all ~250k rows
+-- on every keystroke. %/_/\ are escaped before baking, so the term stays a
+-- literal and can't widen its own match (or inject SQL). Runs as the
+-- invoker, so RLS's public read policy applies. Called by app.js
+-- runFilteredView.
 create or replace function sales_stats(
   p_term text default null,
   p_district text default null,
@@ -156,54 +163,68 @@ returns table (
   types json,
   rows json
 )
-language sql
+language plpgsql
 stable
 as $$
-  with t as (
-    select coalesce(p_term, '') as raw,
-           replace(replace(replace(coalesce(p_term, ''), '\', '\\'), '%', '\%'), '_', '\_') as esc
-  ),
-  matches as (
-    select address, postal_district, eircode, property_type, price, sale_date,
-           size_description, vat_exclusive, not_full_market_price
-    from sales s, t
-    where (
-        t.raw = ''
-        or s.address ilike '%' || t.esc || '%' escape '\'
-        or s.eircode ilike '%' || replace(t.esc, ' ', '') || '%' escape '\'
-        or s.postal_district ilike '%' || t.esc || '%' escape '\'
-      )
-      and (p_district is null or p_district = '' or s.postal_district = p_district)
-      and (p_types is null or p_types = '' or s.property_type = any(string_to_array(p_types, '|')))
-      and (p_include_non_market or not s.not_full_market_price)
-  )
-  select
-    (select count(*) from matches),
-    (select percentile_cont(0.5) within group (order by price)::float8 from matches),
-    (select max(sale_date) from matches),
-    (select coalesce(json_agg(q), '[]') from (
-       select date_trunc('quarter', sale_date)::date as quarter,
-              percentile_cont(0.5) within group (order by price)::float8 as median_price,
-              count(*) as sale_count
-       from matches group by 1 order by 1
-     ) q),
-    (select coalesce(json_agg(d), '[]') from (
-       select postal_district,
-              percentile_cont(0.5) within group (order by price)::float8 as median_price,
-              count(*) as sale_count
-       from matches where postal_district is not null group by 1 order by 1
-     ) d),
-    (select coalesce(json_agg(v), '[]') from (
-       select property_type,
-              percentile_cont(0.5) within group (order by price)::float8 as median_price,
-              count(*) as sale_count
-       from matches where property_type is not null group by 1 order by 2 desc
-     ) v),
-    (select coalesce(json_agg(r), '[]') from (
-       select sale_date::text, address, postal_district, eircode, property_type,
-              price::float8, size_description, vat_exclusive, not_full_market_price
-       from matches order by sale_date desc limit 200
-     ) r);
+declare
+  esc text;
+  conds text[] := '{}';
+begin
+  if coalesce(p_term, '') <> '' then
+    esc := replace(replace(replace(p_term, '\', '\\'), '%', '\%'), '_', '\_');
+    conds := array_append(conds, format(
+      $w$(s.address ilike %L escape '\' or s.eircode ilike %L escape '\' or s.postal_district ilike %L escape '\')$w$,
+      '%' || esc || '%',
+      '%' || replace(esc, ' ', '') || '%',
+      '%' || esc || '%'
+    ));
+  end if;
+  if p_district is not null and p_district <> '' then
+    conds := array_append(conds, format('s.postal_district = %L', p_district));
+  end if;
+  if p_types is not null and p_types <> '' then
+    conds := array_append(conds, format('s.property_type = any(string_to_array(%L, ''|''))', p_types));
+  end if;
+  if not p_include_non_market then
+    conds := array_append(conds, 'not s.not_full_market_price');
+  end if;
+
+  return query execute format($q$
+    with matches as (
+      select address, postal_district, eircode, property_type, price, sale_date,
+             size_description, vat_exclusive, not_full_market_price
+      from sales s
+      %s
+    )
+    select
+      (select count(*) from matches),
+      (select percentile_cont(0.5) within group (order by price)::float8 from matches),
+      (select max(sale_date) from matches),
+      (select coalesce(json_agg(q), '[]') from (
+         select date_trunc('quarter', sale_date)::date as quarter,
+                percentile_cont(0.5) within group (order by price)::float8 as median_price,
+                count(*) as sale_count
+         from matches group by 1 order by 1
+       ) q),
+      (select coalesce(json_agg(d), '[]') from (
+         select postal_district,
+                percentile_cont(0.5) within group (order by price)::float8 as median_price,
+                count(*) as sale_count
+         from matches where postal_district is not null group by 1 order by 1
+       ) d),
+      (select coalesce(json_agg(v), '[]') from (
+         select property_type,
+                percentile_cont(0.5) within group (order by price)::float8 as median_price,
+                count(*) as sale_count
+         from matches where property_type is not null group by 1 order by 2 desc
+       ) v),
+      (select coalesce(json_agg(r), '[]') from (
+         select sale_date::text, address, postal_district, eircode, property_type,
+                price::float8, size_description, vat_exclusive, not_full_market_price
+         from matches order by sale_date desc limit 200
+       ) r)
+    $q$, case when array_length(conds, 1) > 0 then ' where ' || array_to_string(conds, ' and ') else '' end);
+end
 $$;
 
 grant execute on function sales_stats(text, text, text, boolean) to anon, authenticated;
