@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dublin Property Prices</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <h1>Dublin Property Prices</h1>
+      <p class="subtitle">
+        Every registered residential sale in Dublin since 2010, sourced from the
+        <a href="https://www.propertypriceregister.ie" target="_blank" rel="noopener">PSRA Residential Property Price Register</a>.
+        Refreshed monthly.
+      </p>
+    </header>
+
+    <div class="filters">
+      <input
+        id="search"
+        type="text"
+        placeholder="Search by address, Eircode, or postal district (e.g. D02, Rathmines)…"
+        autocomplete="off"
+      />
+      <label class="checkbox">
+        <input id="include-non-market" type="checkbox" />
+        Include non-market-price sales (gifts, transfers)
+      </label>
+      <span id="result-note" class="result-note"></span>
+    </div>
+
+    <section class="stats" id="stats" aria-label="Summary statistics">
+      <div class="stat-tile">
+        <span class="stat-label">Total sales</span>
+        <span class="stat-value" id="stat-total">—</span>
+      </div>
+      <div class="stat-tile">
+        <span class="stat-label">Median price</span>
+        <span class="stat-value" id="stat-median">—</span>
+      </div>
+      <div class="stat-tile">
+        <span class="stat-label">Postal districts</span>
+        <span class="stat-value" id="stat-districts">—</span>
+      </div>
+      <div class="stat-tile">
+        <span class="stat-label">Latest sale recorded</span>
+        <span class="stat-value" id="stat-latest">—</span>
+      </div>
+    </section>
+
+    <section class="charts-grid">
+      <div class="chart-card">
+        <h2>Median price by quarter</h2>
+        <canvas id="chart-quarterly" role="img" aria-label="Line chart of median sale price by quarter"></canvas>
+      </div>
+      <div class="chart-card">
+        <h2>Median price by postal district</h2>
+        <canvas id="chart-district" role="img" aria-label="Bar chart of median sale price by Dublin postal district"></canvas>
+      </div>
+      <div class="chart-card">
+        <h2>Median price by property type</h2>
+        <canvas id="chart-type" role="img" aria-label="Bar chart of median sale price by property type"></canvas>
+      </div>
+    </section>
+
+    <section class="table-card">
+      <h2 id="table-heading">Recent sales</h2>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Address</th>
+              <th>Postal district</th>
+              <th>Eircode</th>
+              <th>Type</th>
+              <th class="num">Price</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="page-footer">
+      Data: PSRA Residential Property Price Register (open data). Not affiliated with the PSRA.
+      Source on <a href="https://github.com/stefan-bc/dublin-properties" target="_blank" rel="noopener">GitHub</a>.
+    </footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
