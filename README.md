@@ -55,6 +55,22 @@ PPR CSV (weekly)  →  GitHub Action (scripts/ingest.mjs)  →  Supabase Postgre
   address is always one district and one property type, so those two charts
   are hidden there rather than shown as a meaningless one-bar chart; the
   quarterly chart becomes that address's own raw price history instead.
+- **Postal district choropleth**: `dublin-districts.js` holds real Eircode
+  routing-key boundaries for the 22 core Dublin districts (`D01`–`D24`,
+  `D6W`), sourced from
+  [Dublin Postcode Boundaries, autoaddress.ie](https://zenodo.org/records/4589220)
+  (CC BY 4.0, derived from data.gov.ie Small Area boundaries + Eircode
+  Routing Key data), simplified and rounded to keep the file under 60KB. Real
+  geometry was used rather than a hand-drawn approximation or schematic — a
+  fabricated Dublin map would be worse than no map for users who know the
+  city. `renderMap()` in `app.js` draws it as inline SVG, colours each
+  district by median price on the same sequential blue scale used
+  elsewhere, and reuses the same click-to-filter pattern as address/district
+  search suggestions. `Co. Dublin` sales (routing keys outside the 22 core
+  districts — Fingal, South Dublin, Dún Laoghaire-Rathdown areas like Lucan,
+  Swords, Dún Laoghaire) don't correspond to one of the 22 shapes, so they're
+  called out with a count and a link to filter by them rather than silently
+  dropped from the map.
 
 ## Setup (manual steps — need your accounts, not automatable from here)
 
@@ -101,8 +117,14 @@ npx serve .
   otherwise parsed from the free-text address, validated against the real 20
   districts — anything that doesn't match a real district falls back to
   "Co. Dublin" rather than showing a fabricated one.
-- No geocoding/choropleth map yet — aggregation is by postal district only.
-  Planned as a follow-up.
+- The postal district choropleth uses real district boundaries (see
+  Architecture) but simplified geometry — coordinates rounded to the metre
+  and polygons simplified with a 10m tolerance, so very fine coastal/edge
+  detail is smoothed out. Good enough for a colour-by-district map, not a
+  survey. `Co. Dublin` sales (parsed from an Eircode routing key or address
+  outside the 22 core districts) aren't plotted, since there's no single
+  shape for that catch-all — a count and filter link are shown instead of
+  guessing a boundary for it.
 - "Not full market price" sales (gifts, part-transfers) are excluded from the
   default view but not from the data — toggle "Include non-market-price
   sales" to see them.
@@ -113,4 +135,5 @@ npx serve .
 - [x] Schema applied to Supabase
 - [x] Anon key added to `config.js`
 - [x] First ingest run — 249,311 Dublin rows loaded, verified end-to-end in a real browser
-- [ ] Deployed to Cloudflare Pages under `dublin.ectoplasma.org`
+- [x] Deployed to Cloudflare Pages — live at `dublin-properties.pages.dev`, connected to this repo, auto-deploys on push to `main`
+- [ ] Custom domain `dublin.ectoplasma.org` attached (zone already exists in the same Cloudflare account, not yet wired up)

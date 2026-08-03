@@ -104,12 +104,28 @@ const palette = {
   textMuted: '#898781',
   series1: '#3987e5',
   series2: '#199e70',
+  // Sequential choropleth scale — mirrors the --scale-low/--scale-high CSS
+  // vars in style.css (same duplication pattern as the rest of this object;
+  // Chart.js/SVG colour options need real values, not custom-property refs).
+  scaleLow: '#1e3a5c',
+  scaleHigh: '#5fa8f5',
+  scaleNoData: '#2c2c2a',
 };
+
+// Linear RGB interpolation between two hex colours, t in [0, 1]. Good enough
+// for a small sequential ramp between two blues (not spanning hues, so no
+// need for perceptual/OKLCH interpolation here).
+function lerpColor(hexA, hexB, t) {
+  const a = [1, 3, 5].map((i) => parseInt(hexA.slice(i, i + 2), 16));
+  const b = [1, 3, 5].map((i) => parseInt(hexB.slice(i, i + 2), 16));
+  const rgb = a.map((v, i) => Math.round(v + (b[i] - v) * t));
+  return `rgb(${rgb.join(',')})`;
+}
 
 Chart.defaults.font.family = '"JetBrains Mono", ui-monospace, monospace';
 Chart.defaults.font.size = 12;
 Chart.defaults.color = palette.textMuted;
-Chart.defaults.animation = false; // plain and live, not a gimmick
+Chart.defaults.animation = { duration: 450, easing: 'easeOutQuart' }; // subtle, quick — not a gimmick
 
 const RESULT_LIMIT = 200;
 const RECENT_LIMIT = 50;
@@ -138,6 +154,23 @@ function districtSynonyms(label) {
     syns.push(label.replace('.', '').toLowerCase());
   }
   return syns;
+}
+
+// Maps a "Dublin N"/"Dublin NW" label to its Eircode routing key ("D01",
+// "D6W", ...) to look it up in DUBLIN_DISTRICT_GEOMETRY. Returns null for
+// anything that isn't one of the 22 core districts (i.e. "Co. Dublin") —
+// that bucket has no single shape and is deliberately not drawn, see
+// renderMap().
+function districtRoutingKey(label) {
+  const m = label.match(/^Dublin (\d{1,2}W?)$/i);
+  if (!m) return null;
+  const suffix = m[1].toUpperCase();
+  return suffix.endsWith('W') ? `D${suffix}` : `D${suffix.padStart(2, '0')}`;
+}
+
+function districtLabelFromKey(key) {
+  const suffix = key.slice(1);
+  return suffix.endsWith('W') ? `Dublin ${suffix}` : `Dublin ${parseInt(suffix, 10)}`;
 }
 
 function baseScales(extra = {}) {
@@ -260,6 +293,143 @@ function renderDistrict(rows) {
   });
 }
 
+// Builds the "M x,y L x,y ... Z" path data for one district's geometry,
+// converting from Irish Transverse Mercator metres to SVG user units: shift
+// by the shared bbox origin, and flip Y (northing increases upward; SVG
+// increases downward). fill-rule="evenodd" on the <path> handles any ring
+// that turns out to be a hole rather than a separate landmass correctly
+// either way, so this doesn't need to know which case it is.
+function districtPathData(polys, bbox) {
+  const [minX, , , maxY] = bbox;
+  const subpaths = [];
+  for (const poly of polys) {
+    for (const ring of poly) {
+      const pts = ring.map(([x, y]) => `${x - minX},${maxY - y}`);
+      subpaths.push(`M${pts.join('L')}Z`);
+    }
+  }
+  return subpaths.join(' ');
+}
+
+let mapTooltipEl, mapWrapEl;
+
+function positionMapTooltip(evt) {
+  const wrapRect = mapWrapEl.getBoundingClientRect();
+  mapTooltipEl.style.left = `${evt.clientX - wrapRect.left}px`;
+  mapTooltipEl.style.top = `${evt.clientY - wrapRect.top}px`;
+}
+
+function showMapTooltip(evt, label, medianPrice, saleCount) {
+  mapTooltipEl.innerHTML = '';
+  const title = document.createElement('div');
+  title.className = 'tooltip-title';
+  title.textContent = label;
+  const meta = document.createElement('div');
+  meta.className = 'tooltip-meta';
+  meta.textContent =
+    medianPrice == null
+      ? 'No sales recorded'
+      : `${eur.format(medianPrice)} median · ${saleCount.toLocaleString()} sale${saleCount === 1 ? '' : 's'}`;
+  mapTooltipEl.appendChild(title);
+  mapTooltipEl.appendChild(meta);
+  mapTooltipEl.hidden = false;
+  positionMapTooltip(evt);
+}
+
+function hideMapTooltip() {
+  mapTooltipEl.hidden = true;
+}
+
+// Colours, draws, and wires up the choropleth. `rows` is the same
+// {postal_district, median_price, sale_count} shape renderDistrict gets —
+// whatever's driving the bar chart also drives the map, so they can never
+// disagree. Districts not present in `rows` (no sales matching the current
+// filter) render in the flat "no data" grey rather than being hidden.
+function renderMap(rows) {
+  const svg = document.getElementById('map-svg');
+  const byKey = new Map();
+  for (const r of rows) {
+    const key = districtRoutingKey(r.postal_district);
+    if (key) byKey.set(key, r);
+  }
+
+  const mapped = [...byKey.values()];
+  const prices = mapped.map((r) => r.median_price);
+  const minPrice = prices.length ? Math.min(...prices) : 0;
+  const maxPrice = prices.length ? Math.max(...prices) : 0;
+
+  document.getElementById('map-legend-low').textContent = prices.length ? eurCompact.format(minPrice) : '—';
+  document.getElementById('map-legend-high').textContent = prices.length ? eurCompact.format(maxPrice) : '—';
+
+  // "Co. Dublin" sales are real but don't correspond to one of the 22
+  // mapped shapes — noted honestly rather than silently dropped from the map.
+  const coDublinRow = rows.find((r) => r.postal_district === 'Co. Dublin');
+  const note = document.getElementById('map-co-dublin-note');
+  if (coDublinRow) {
+    note.hidden = false;
+    note.replaceChildren();
+    note.append(`${coDublinRow.sale_count.toLocaleString()} sale${coDublinRow.sale_count === 1 ? '' : 's'} in `);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = 'Co. Dublin';
+    btn.title = 'Filter by Co. Dublin';
+    btn.addEventListener('click', () => {
+      districtSelect.value = 'Co. Dublin';
+      runFilteredView();
+    });
+    note.appendChild(btn);
+    note.append(' fall outside the 22 mapped districts and aren’t shown geographically.');
+  } else {
+    note.hidden = true;
+  }
+
+  const { bbox, districts } = DUBLIN_DISTRICT_GEOMETRY;
+  const [minX, minY, maxX, maxY] = bbox;
+  svg.setAttribute('viewBox', `0 0 ${maxX - minX} ${maxY - minY}`);
+  svg.replaceChildren();
+
+  for (const [key, polys] of Object.entries(districts)) {
+    const row = byKey.get(key);
+    const label = districtLabelFromKey(key);
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', districtPathData(polys, bbox));
+    path.setAttribute('fill-rule', 'evenodd');
+    path.setAttribute('tabindex', '0');
+    path.setAttribute('role', 'button');
+    path.setAttribute('class', 'district-path');
+
+    if (row) {
+      const t = maxPrice === minPrice ? 1 : (row.median_price - minPrice) / (maxPrice - minPrice);
+      path.setAttribute('fill', lerpColor(palette.scaleLow, palette.scaleHigh, t));
+      path.setAttribute('aria-label', `${label}: ${eur.format(row.median_price)} median, ${row.sale_count} sales`);
+    } else {
+      path.classList.add('no-data');
+      path.setAttribute('fill', palette.scaleNoData);
+      path.setAttribute('aria-label', `${label}: no sales recorded`);
+    }
+
+    path.addEventListener('mouseenter', (e) => showMapTooltip(e, label, row?.median_price, row?.sale_count));
+    path.addEventListener('mousemove', positionMapTooltip);
+    path.addEventListener('mouseleave', hideMapTooltip);
+    path.addEventListener('focus', (e) => showMapTooltip(e, label, row?.median_price, row?.sale_count));
+    path.addEventListener('blur', hideMapTooltip);
+
+    const activate = () => {
+      districtSelect.value = label;
+      runFilteredView();
+    };
+    path.addEventListener('click', activate);
+    path.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        activate();
+      }
+    });
+
+    svg.appendChild(path);
+  }
+}
+
 function renderType(rows) {
   const ctx = document.getElementById('chart-type');
   const labels = rows.map((r) => propertyTypeLabel(r.property_type));
@@ -302,6 +472,7 @@ function renderType(rows) {
 function setChartsMode(mode, rows = []) {
   const districtCard = document.getElementById('card-district');
   const typeCard = document.getElementById('card-type');
+  const mapCard = document.getElementById('card-map');
   const quarterlyCard = document.getElementById('card-quarterly');
   const quarterlyHeading = document.getElementById('chart-quarterly-heading');
   const emptyNote = document.getElementById('charts-empty-note');
@@ -309,6 +480,7 @@ function setChartsMode(mode, rows = []) {
   if (mode === 'address') {
     districtCard.hidden = true;
     typeCard.hidden = true;
+    mapCard.hidden = true; // same reasoning as the district bar chart — one address is one district
     quarterlyHeading.textContent = 'Price history for this address';
     if (rows.length < 2) {
       quarterlyCard.hidden = true;
@@ -321,6 +493,7 @@ function setChartsMode(mode, rows = []) {
   } else {
     districtCard.hidden = false;
     typeCard.hidden = false;
+    mapCard.hidden = false;
     quarterlyCard.hidden = false;
     emptyNote.hidden = true;
     quarterlyHeading.textContent = 'Median price by quarter';
@@ -430,6 +603,7 @@ function aggregateFromRows(rows) {
     district: [...byDistrict.entries()].map(([postal_district, prices]) => ({
       postal_district,
       median_price: median(prices),
+      sale_count: prices.length, // renderMap's tooltip/Co. Dublin note need this; renderDistrict ignores it
     })),
     type: [...byType.entries()].map(([property_type, prices]) => ({
       property_type,
@@ -479,11 +653,29 @@ function renderNotesCell(r) {
   return td;
 }
 
+// Briefly re-triggers the value-in fade so a stat tile visibly updates
+// instead of silently snapping to a new number.
+function setStat(id, text) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.classList.remove('flash');
+  void el.offsetWidth; // restart the animation
+  el.classList.add('flash');
+}
+
+// Dims stats/charts/table while a view is being (re)loaded, so filtering
+// reads as a transition rather than a jump-cut. Skipped for the true first
+// load, which gets the stronger shimmer skeleton instead (see loadDefaultView).
+function setViewLoading(loading) {
+  document.querySelector('.page').classList.toggle('view-loading', loading);
+}
+
 function renderTable(rows, cap) {
   const body = document.getElementById('table-body');
   body.replaceChildren();
-  for (const r of rows) {
+  rows.forEach((r, i) => {
     const tr = document.createElement('tr');
+    tr.style.animationDelay = `${Math.min(i, 20) * 12}ms`;
 
     const dateTd = document.createElement('td');
     dateTd.textContent = r.sale_date;
@@ -516,7 +708,7 @@ function renderTable(rows, cap) {
     tr.appendChild(renderNotesCell(r));
 
     body.appendChild(tr);
-  }
+  });
   const note = document.getElementById('result-note');
   if (rows.length >= cap) {
     note.textContent = `Showing first ${cap} matches`;
@@ -530,6 +722,8 @@ async function loadDefaultView() {
   document.getElementById('table-heading').textContent = 'Recent sales';
   document.getElementById('result-note').textContent = '';
   document.getElementById('address-detail').hidden = true;
+  document.getElementById('stats').classList.add('is-loading');
+  setViewLoading(true);
 
   const [summaryRes, quarterly, district, type, recent] = await Promise.all([
     pg('sales_summary', { select: '*' }),
@@ -546,15 +740,16 @@ async function loadDefaultView() {
 
   const summary = summaryRes.data?.[0];
   if (summary) {
-    document.getElementById('stat-total').textContent = summary.total_sales.toLocaleString();
-    document.getElementById('stat-median').textContent = eur.format(summary.median_price);
-    document.getElementById('stat-newbuild').textContent = `${newBuildShareFromCounts(type.data || [])}%`;
-    document.getElementById('stat-latest').textContent = summary.latest_sale_date;
+    setStat('stat-total', summary.total_sales.toLocaleString());
+    setStat('stat-median', eur.format(summary.median_price));
+    setStat('stat-newbuild', `${newBuildShareFromCounts(type.data || [])}%`);
+    setStat('stat-latest', summary.latest_sale_date);
   }
 
   setChartsMode('aggregate');
   renderQuarterly(quarterly.data || []);
   renderDistrict(district.data || []);
+  renderMap(district.data || []);
   renderType(mergeTypeRows(type.data || []));
   renderTable(recent.data || [], RECENT_LIMIT);
 
@@ -565,6 +760,9 @@ async function loadDefaultView() {
   }));
   typeOptions = buildTypeOptions(type.data || []);
   populateFilterSelects();
+
+  document.getElementById('stats').classList.remove('is-loading');
+  setViewLoading(false);
 }
 
 function populateFilterSelects() {
@@ -600,10 +798,10 @@ function escapeForEircodeFilter(term) {
 function applyResultSet(data, cap) {
   renderTable(data, cap);
   document.getElementById('address-detail').hidden = true; // re-shown by renderAddressDetail when relevant
-  document.getElementById('stat-total').textContent = data.length.toLocaleString();
-  document.getElementById('stat-median').textContent = eur.format(median(data.map((r) => r.price)));
-  document.getElementById('stat-newbuild').textContent = `${newBuildShareFromRows(data)}%`;
-  document.getElementById('stat-latest').textContent = data.length ? data[0].sale_date : '—';
+  setStat('stat-total', data.length.toLocaleString());
+  setStat('stat-median', eur.format(median(data.map((r) => r.price))));
+  setStat('stat-newbuild', `${newBuildShareFromRows(data)}%`);
+  setStat('stat-latest', data.length ? data[0].sale_date : '—');
 }
 
 function applyAggregateCharts(data) {
@@ -611,6 +809,7 @@ function applyAggregateCharts(data) {
   const agg = aggregateFromRows(data);
   renderQuarterly(agg.quarterly.sort((a, b) => a.quarter.localeCompare(b.quarter)));
   renderDistrict(agg.district);
+  renderMap(agg.district);
   renderType(agg.type);
 }
 
@@ -639,6 +838,8 @@ async function runFilteredView() {
     return;
   }
 
+  setViewLoading(true);
+
   const params = {
     select: 'sale_date,address,postal_district,eircode,property_type,price,size_description,vat_exclusive,not_full_market_price',
     order: 'sale_date.desc',
@@ -664,12 +865,14 @@ async function runFilteredView() {
   if (requestId !== viewRequestId) return; // superseded by a newer view request
   if (error) {
     console.error(error);
+    setViewLoading(false);
     return;
   }
 
   document.getElementById('table-heading').textContent = buildFilterHeading(term, district, type);
   applyResultSet(data, RESULT_LIMIT);
   applyAggregateCharts(data);
+  setViewLoading(false);
 }
 
 async function runAddressHistory(address) {
@@ -678,6 +881,7 @@ async function runAddressHistory(address) {
   hideSuggestions();
   searchInput.value = address;
   toggleClearButton();
+  setViewLoading(true);
 
   const { data, error } = await pg('sales', {
     select: 'sale_date,address,postal_district,eircode,property_type,price,size_description,vat_exclusive,not_full_market_price',
@@ -688,12 +892,14 @@ async function runAddressHistory(address) {
   if (requestId !== viewRequestId) return; // superseded by a newer view request
   if (error) {
     console.error(error);
+    setViewLoading(false);
     return;
   }
   document.getElementById('table-heading').textContent = `Sale history: ${address}`;
   applyResultSet(data, RESULT_LIMIT);
   setChartsMode('address', data);
   renderAddressDetail(data);
+  setViewLoading(false);
 }
 
 function debounce(fn, ms) {
@@ -712,6 +918,8 @@ const clearButton = document.getElementById('search-clear');
 const suggestionsEl = document.getElementById('suggestions');
 const districtSelect = document.getElementById('filter-district');
 const typeSelect = document.getElementById('filter-type');
+mapWrapEl = document.getElementById('map-wrap');
+mapTooltipEl = document.getElementById('map-tooltip');
 
 const debouncedFilteredView = debounce(runFilteredView, 300);
 

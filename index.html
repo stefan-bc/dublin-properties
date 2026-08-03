@@ -48,7 +48,7 @@
       <span id="result-note" class="result-note"></span>
     </div>
 
-    <section class="stats" id="stats" aria-label="Summary statistics">
+    <section class="stats is-loading" id="stats" aria-label="Summary statistics">
       <div class="stat-tile">
         <span class="stat-label">Total sales</span>
         <span class="stat-value" id="stat-total">—</span>
@@ -81,6 +81,26 @@
         <h2>Median price by property type</h2>
         <canvas id="chart-type" role="img" aria-label="Bar chart of median sale price by property type"></canvas>
       </div>
+    </section>
+
+    <section class="chart-card map-card" id="card-map">
+      <div class="map-card-head">
+        <h2>Median price by postal district — map</h2>
+        <span class="table-hint">Click a district to filter</span>
+      </div>
+      <div class="map-wrap" id="map-wrap">
+        <svg id="map-svg" role="img" aria-label="Choropleth map of Dublin postal districts coloured by median sale price"></svg>
+        <div id="map-tooltip" class="map-tooltip" hidden></div>
+      </div>
+      <div class="map-legend">
+        <span id="map-legend-low" class="map-legend-value">—</span>
+        <span class="map-legend-bar"></span>
+        <span id="map-legend-high" class="map-legend-value">—</span>
+      </div>
+      <p id="map-co-dublin-note" class="table-hint map-note" hidden></p>
+      <p class="table-hint map-source">
+        District boundaries: <a href="https://zenodo.org/records/4589220" target="_blank" rel="noopener">Dublin Postcode Boundaries, autoaddress.ie</a> (CC BY 4.0).
+      </p>
     </section>
 
     <section class="table-card">
@@ -118,6 +138,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="config.js"></script>
+  <script src="dublin-districts.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

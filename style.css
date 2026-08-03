@@ -10,6 +10,13 @@
 
   --series-1: #3987e5; /* blue */
   --series-2: #199e70; /* teal */
+
+  /* Sequential scale for the district-price choropleth: one hue (blue, same
+     family as --series-1), light->dark mapped to low->high price so the
+     ramp reads as magnitude, not identity. */
+  --scale-low: #1e3a5c;
+  --scale-high: #5fa8f5;
+  --scale-no-data: var(--gridline);
 }
 
 * {
@@ -25,10 +32,32 @@ body {
   line-height: 1.5;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .page {
   max-width: 1200px;
   margin: 0 auto;
   padding: 32px 20px 64px;
+  animation: page-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 a {
@@ -42,6 +71,7 @@ a {
   letter-spacing: -0.02em;
   width: fit-content;
   cursor: pointer;
+  transition: color 150ms ease;
 }
 
 .topbar h1:hover {
@@ -90,6 +120,7 @@ a {
   font-family: inherit;
   font-size: 13px;
   padding: 9px 34px 9px 12px;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
 #search:focus {
@@ -111,11 +142,23 @@ a {
   line-height: 1;
   cursor: pointer;
   border-radius: 4px;
+  transition: color 150ms ease, background-color 150ms ease;
 }
 
 .search-clear:hover {
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.06);
+}
+
+@keyframes suggestions-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .suggestions {
@@ -135,6 +178,10 @@ a {
   overflow-y: auto;
 }
 
+.suggestions:not([hidden]) {
+  animation: suggestions-in 140ms ease-out both;
+}
+
 .suggestions .group-label {
   padding: 6px 8px 4px;
   color: var(--text-muted);
@@ -152,6 +199,7 @@ a {
   border-radius: 5px;
   cursor: pointer;
   font-size: 13px;
+  transition: background-color 120ms ease;
 }
 
 .suggestions li.option .label {
@@ -180,6 +228,12 @@ a {
   font-family: inherit;
   font-size: 13px;
   padding: 9px 10px;
+  transition: border-color 150ms ease;
+  /* Fixed rather than content-sized: a <select>'s intrinsic width follows
+     its widest <option>, and the real district/type lists (populated after
+     the first fetch) are wider than the "All ..." placeholder — without
+     this the whole filters row visibly reflows right after load. */
+  min-width: 205px;
 }
 
 .filter-select:focus {
@@ -200,6 +254,11 @@ a {
   color: var(--text-muted);
   font-size: 12px;
   margin-left: auto;
+  /* Reserved so the filters row doesn't reflow/wrap differently once this
+     goes from empty (pre-load) to populated ("Showing first N matches") —
+     otherwise the row visibly changes shape right after the page loads. */
+  min-width: 190px;
+  text-align: right;
 }
 
 .stats {
@@ -232,6 +291,51 @@ a {
   font-variant-numeric: proportional-nums;
 }
 
+@keyframes value-in {
+  from {
+    opacity: 0.25;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.stat-value.flash {
+  animation: value-in 300ms ease-out;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.stats.is-loading .stat-value {
+  display: inline-block;
+  min-width: 70px;
+  min-height: 1em;
+  color: transparent;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--surface) 25%, rgba(255, 255, 255, 0.09) 50%, var(--surface) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.3s ease-in-out infinite;
+}
+
+.stats,
+.charts-grid,
+.table-card {
+  transition: opacity 200ms ease;
+}
+
+.view-loading .stats:not(.is-loading),
+.view-loading .charts-grid,
+.view-loading .table-card {
+  opacity: 0.5;
+}
+
 .charts-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
@@ -258,6 +362,119 @@ a {
 
 .chart-card canvas {
   max-height: 260px;
+}
+
+.map-card {
+  margin-bottom: 24px;
+}
+
+.map-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.map-card-head h2 {
+  margin: 0;
+}
+
+.map-wrap {
+  position: relative;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+#map-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.district-path {
+  stroke: var(--page);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+  transition: filter 120ms ease, stroke-width 120ms ease;
+}
+
+.district-path:hover,
+.district-path:focus-visible {
+  filter: brightness(1.25);
+  stroke: var(--text-primary);
+  stroke-width: 2.5;
+  outline: none;
+}
+
+.district-path.no-data {
+  cursor: default;
+}
+
+.map-tooltip {
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+  background: #0d0d0d;
+  border: 1px solid var(--baseline);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: nowrap;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+  transform: translate(-50%, calc(-100% - 10px));
+}
+
+.map-tooltip .tooltip-title {
+  font-weight: 600;
+}
+
+.map-tooltip .tooltip-meta {
+  color: var(--text-muted);
+}
+
+.map-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+  max-width: 480px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.map-legend-value {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.map-legend-bar {
+  flex: 1 1 auto;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--scale-low), var(--scale-high));
+}
+
+.map-note,
+.map-source {
+  text-align: center;
+  margin: 10px 0 0;
+}
+
+.map-note button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--series-1);
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  text-decoration: underline;
 }
 
 .table-card {
@@ -306,6 +523,10 @@ a {
   display: none;
 }
 
+.address-detail:not([hidden]) {
+  animation: suggestions-in 180ms ease-out both;
+}
+
 #address-detail-meta {
   color: var(--text-secondary);
 }
@@ -318,6 +539,7 @@ a {
 
 td.address-cell {
   cursor: pointer;
+  transition: color 120ms ease;
 }
 
 td.address-cell:hover {
@@ -382,6 +604,22 @@ th.num {
   font-variant-numeric: tabular-nums;
 }
 
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+tbody tr {
+  transition: background-color 120ms ease;
+  animation: row-in 240ms ease-out both;
+}
+
 tbody tr:hover {
   background: rgba(255, 255, 255, 0.03);
 }
@@ -427,6 +665,8 @@ tbody tr:hover {
 
   .result-note {
     margin-left: 0;
+    min-width: 0;
+    text-align: left;
   }
 
   .checkbox {
