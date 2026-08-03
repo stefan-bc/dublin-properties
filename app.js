@@ -1,4 +1,16 @@
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Plain fetch against PostgREST instead of @supabase/supabase-js — this
+// dashboard only ever runs simple SELECTs with the public anon key. The SDK
+// bundles Auth, Realtime (a WebSocket client), and Storage, none of which
+// anything here touches; that's dead weight worth cutting.
+const REST_URL = `${SUPABASE_URL}/rest/v1`;
+const REST_HEADERS = { apikey: SUPABASE_ANON_KEY };
+
+async function pg(table, params) {
+  const qs = new URLSearchParams(params).toString();
+  const res = await fetch(`${REST_URL}/${table}?${qs}`, { headers: REST_HEADERS });
+  if (!res.ok) return { data: null, error: await res.text() };
+  return { data: await res.json(), error: null };
+}
 
 const eur = new Intl.NumberFormat('en-IE', {
   style: 'currency',
@@ -11,11 +23,79 @@ const eurCompact = new Intl.NumberFormat('en-IE', {
   notation: 'compact',
   maximumFractionDigits: 1,
 });
-const dateFmt = new Intl.DateTimeFormat('en-IE', { year: 'numeric', month: 'short', day: 'numeric' });
 const quarterFmt = (isoDate) => {
   const d = new Date(isoDate);
   return `${d.getUTCFullYear()} Q${Math.floor(d.getUTCMonth() / 3) + 1}`;
 };
+
+// The PPR source register mostly uses "New/Second-Hand Dwelling house
+// /Apartment", but a handful of rows (~23 out of 249k) record the same two
+// categories in Irish instead ("Teach/Árasán Cónaithe Nua/Atháimhe"), plus
+// one row where the source CSV itself has mis-encoded characters. All of
+// these fold into the same two plain-English labels everywhere.
+const PROPERTY_TYPE_LABELS = {
+  'New Dwelling house /Apartment': 'New Build',
+  'Second-Hand Dwelling house /Apartment': 'Resale',
+  'Teach/Árasán Cónaithe Nua': 'New Build',
+  'Teach/?ras?n C?naithe Nua': 'New Build',
+  'Teach/Árasán Cónaithe Atháimhe': 'Resale',
+};
+function propertyTypeLabel(raw) {
+  return PROPERTY_TYPE_LABELS[raw] || raw;
+}
+
+// Groups aggregate-view rows (raw property_type, one row per source string)
+// into the merged English labels above. The median is a count-weighted mean
+// of the sub-medians — not a true recomputed median, but with the Irish-
+// language variants at <0.1% of rows the difference is immaterial, and this
+// only runs against ~4 pre-aggregated rows, not the full dataset.
+function mergeTypeRows(rows) {
+  const byLabel = new Map();
+  for (const r of rows) {
+    const label = propertyTypeLabel(r.property_type);
+    if (!byLabel.has(label)) byLabel.set(label, { property_type: label, totalPrice: 0, sale_count: 0 });
+    const entry = byLabel.get(label);
+    entry.totalPrice += r.median_price * r.sale_count;
+    entry.sale_count += r.sale_count;
+  }
+  return [...byLabel.values()].map((e) => ({
+    property_type: e.property_type,
+    median_price: e.totalPrice / e.sale_count,
+  }));
+}
+
+// Same merge, but keeps the underlying raw source strings per label so the
+// property-type <select> can filter on all of them at once (see runFilteredView).
+function buildTypeOptions(rows) {
+  const byLabel = new Map();
+  for (const r of rows) {
+    const label = propertyTypeLabel(r.property_type);
+    if (!byLabel.has(label)) byLabel.set(label, { label, values: [], sale_count: 0 });
+    const entry = byLabel.get(label);
+    entry.values.push(r.property_type);
+    entry.sale_count += r.sale_count;
+  }
+  return [...byLabel.values()].sort((a, b) => b.sale_count - a.sale_count);
+}
+
+// % of sales that are new-builds — from pre-aggregated {property_type,
+// sale_count} rows (the default view's fast path).
+function newBuildShareFromCounts(typeRows) {
+  let newCount = 0;
+  let total = 0;
+  for (const r of typeRows) {
+    total += r.sale_count;
+    if (propertyTypeLabel(r.property_type) === 'New Build') newCount += r.sale_count;
+  }
+  return total ? Math.round((newCount / total) * 100) : 0;
+}
+
+// Same stat, from a raw list of sale rows (the filtered/address-history path).
+function newBuildShareFromRows(rows) {
+  if (!rows.length) return 0;
+  const newCount = rows.filter((r) => propertyTypeLabel(r.property_type) === 'New Build').length;
+  return Math.round((newCount / rows.length) * 100);
+}
 
 const palette = {
   gridline: '#2c2c2a',
@@ -23,7 +103,7 @@ const palette = {
   textSecondary: '#c3c2b7',
   textMuted: '#898781',
   series1: '#3987e5',
-  series2: '#d95926',
+  series2: '#199e70',
 };
 
 Chart.defaults.font.family = '"JetBrains Mono", ui-monospace, monospace';
@@ -36,9 +116,16 @@ const RECENT_LIMIT = 50;
 
 let quarterlyChart, districtChart, typeChart;
 let districtOptions = [];
+let typeOptions = [];
 let addressMatches = [];
 let activeSuggestionIndex = -1;
 let suggestionRequestId = 0;
+// loadDefaultView / runFilteredView / runAddressHistory can all be in flight
+// at once (e.g. typing a search term, then clicking an address suggestion
+// before the search's own query has returned) — whichever started LAST wins;
+// an older response that resolves later is discarded rather than clobbering
+// the screen with stale data.
+let viewRequestId = 0;
 
 function districtSynonyms(label) {
   const syns = [label.toLowerCase()];
@@ -175,7 +262,7 @@ function renderDistrict(rows) {
 
 function renderType(rows) {
   const ctx = document.getElementById('chart-type');
-  const labels = rows.map((r) => r.property_type.replace(' Dwelling house /Apartment', ''));
+  const labels = rows.map((r) => propertyTypeLabel(r.property_type));
   const data = rows.map((r) => Math.round(r.median_price));
 
   if (typeChart) typeChart.destroy();
@@ -207,6 +294,105 @@ function renderType(rows) {
   });
 }
 
+// A single address is always exactly one district and one property type, so
+// those two charts are structurally meaningless there — hide them rather than
+// show a one-bar "chart" that isn't telling the reader anything. The quarterly
+// chart is repurposed into that address's own raw price history (or hidden
+// too, honestly, if there's only one sale to plot).
+function setChartsMode(mode, rows = []) {
+  const districtCard = document.getElementById('card-district');
+  const typeCard = document.getElementById('card-type');
+  const quarterlyCard = document.getElementById('card-quarterly');
+  const quarterlyHeading = document.getElementById('chart-quarterly-heading');
+  const emptyNote = document.getElementById('charts-empty-note');
+
+  if (mode === 'address') {
+    districtCard.hidden = true;
+    typeCard.hidden = true;
+    quarterlyHeading.textContent = 'Price history for this address';
+    if (rows.length < 2) {
+      quarterlyCard.hidden = true;
+      emptyNote.hidden = false;
+    } else {
+      quarterlyCard.hidden = false;
+      emptyNote.hidden = true;
+      renderAddressPriceChart(rows);
+    }
+  } else {
+    districtCard.hidden = false;
+    typeCard.hidden = false;
+    quarterlyCard.hidden = false;
+    emptyNote.hidden = true;
+    quarterlyHeading.textContent = 'Median price by quarter';
+  }
+}
+
+function renderAddressPriceChart(rows) {
+  const sorted = [...rows].sort((a, b) => new Date(a.sale_date) - new Date(b.sale_date));
+  const ctx = document.getElementById('chart-quarterly');
+  const labels = sorted.map((r) => r.sale_date);
+  const data = sorted.map((r) => r.price);
+
+  if (quarterlyChart) quarterlyChart.destroy();
+  quarterlyChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          data,
+          borderColor: palette.series1,
+          backgroundColor: palette.series1 + '1a',
+          borderWidth: 2,
+          pointRadius: 5,
+          pointBackgroundColor: palette.series1,
+          pointBorderColor: '#1a1a19',
+          pointBorderWidth: 2,
+          fill: true,
+          tension: 0, // raw sale points, not a smoothed trend
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          ...tooltipBase(),
+          callbacks: { label: (ctx) => eur.format(ctx.parsed.y) },
+        },
+      },
+      scales: baseScales(),
+    },
+  });
+}
+
+function renderAddressDetail(rows) {
+  const detail = document.getElementById('address-detail');
+  if (!rows.length) {
+    detail.hidden = true;
+    return;
+  }
+
+  const latest = rows[0]; // rows are sale_date desc
+  const sizeRow = rows.find((r) => r.size_description);
+  // Always show every field, labeled — a silently-omitted Eircode reads as
+  // "the app is broken", not "the source register didn't record one".
+  const parts = [
+    propertyTypeLabel(latest.property_type),
+    `District: ${latest.postal_district || 'not recorded'}`,
+    `Eircode: ${latest.eircode || 'not recorded'}`,
+  ];
+  if (sizeRow) parts.push(`Size: ${sizeRow.size_description}`);
+  document.getElementById('address-detail-meta').textContent = parts.join(' · ');
+
+  const query = encodeURIComponent(`${latest.address}, Dublin, Ireland`);
+  document.getElementById('address-detail-map').href = `https://www.google.com/maps/search/?api=1&query=${query}`;
+
+  detail.hidden = false;
+}
+
 function median(values) {
   if (!values.length) return 0;
   const sorted = [...values].sort((a, b) => a - b);
@@ -230,8 +416,9 @@ function aggregateFromRows(rows) {
     }
 
     if (r.property_type) {
-      if (!byType.has(r.property_type)) byType.set(r.property_type, []);
-      byType.get(r.property_type).push(r.price);
+      const label = propertyTypeLabel(r.property_type);
+      if (!byType.has(label)) byType.set(label, []);
+      byType.get(label).push(r.price);
     }
   }
 
@@ -251,6 +438,47 @@ function aggregateFromRows(rows) {
   };
 }
 
+// PPR only records size as a coarse sentence ("greater than or equal to 38
+// sq metres and less than 125 sq metres"); this pulls out just the numbers
+// for a table cell. Falls back to the raw sentence for any phrasing it
+// doesn't recognise, so nothing is silently dropped.
+function shortSize(desc) {
+  if (!desc) return null;
+  const range = desc.match(/greater than or equal to (\d+) sq metres and less than (\d+) sq metres/i);
+  if (range) return `${range[1]}–${range[2]} m²`;
+  const min = desc.match(/greater than or equal to (\d+) sq metres/i);
+  if (min) return `≥${min[1]} m²`;
+  const max = desc.match(/less than (\d+) sq metres/i);
+  if (max) return `<${max[1]} m²`;
+  return desc;
+}
+
+function renderNotesCell(r) {
+  const td = document.createElement('td');
+  td.className = 'notes-cell';
+
+  const size = shortSize(r.size_description);
+  if (size) {
+    const span = document.createElement('span');
+    span.className = 'note-size';
+    span.textContent = size;
+    td.appendChild(span);
+  }
+  if (r.not_full_market_price) {
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = 'Non-market';
+    td.appendChild(badge);
+  }
+  if (r.vat_exclusive) {
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = 'VAT excl.';
+    td.appendChild(badge);
+  }
+  return td;
+}
+
 function renderTable(rows, cap) {
   const body = document.getElementById('table-body');
   body.replaceChildren();
@@ -258,7 +486,7 @@ function renderTable(rows, cap) {
     const tr = document.createElement('tr');
 
     const dateTd = document.createElement('td');
-    dateTd.textContent = dateFmt.format(new Date(r.sale_date));
+    dateTd.textContent = r.sale_date;
     tr.appendChild(dateTd);
 
     const addressTd = document.createElement('td');
@@ -268,18 +496,24 @@ function renderTable(rows, cap) {
     addressTd.addEventListener('click', () => runAddressHistory(r.address));
     tr.appendChild(addressTd);
 
-    const rest = [
-      r.postal_district || '—',
-      r.eircode || '—',
-      r.property_type?.replace(' Dwelling house /Apartment', '') || '—',
-      eur.format(r.price),
-    ];
-    rest.forEach((text, i) => {
-      const td = document.createElement('td');
-      if (i === rest.length - 1) td.className = 'num';
-      td.textContent = text;
-      tr.appendChild(td);
-    });
+    const districtTd = document.createElement('td');
+    districtTd.textContent = r.postal_district || '—';
+    tr.appendChild(districtTd);
+
+    const eircodeTd = document.createElement('td');
+    eircodeTd.textContent = r.eircode || '—';
+    tr.appendChild(eircodeTd);
+
+    const typeTd = document.createElement('td');
+    typeTd.textContent = r.property_type ? propertyTypeLabel(r.property_type) : '—';
+    tr.appendChild(typeTd);
+
+    const priceTd = document.createElement('td');
+    priceTd.className = 'num';
+    priceTd.textContent = eur.format(r.price);
+    tr.appendChild(priceTd);
+
+    tr.appendChild(renderNotesCell(r));
 
     body.appendChild(tr);
   }
@@ -292,27 +526,36 @@ function renderTable(rows, cap) {
 }
 
 async function loadDefaultView() {
+  const requestId = ++viewRequestId;
   document.getElementById('table-heading').textContent = 'Recent sales';
   document.getElementById('result-note').textContent = '';
+  document.getElementById('address-detail').hidden = true;
 
-  const [summary, quarterly, district, type, recent] = await Promise.all([
-    supabaseClient.from('sales_summary').select('*').single(),
-    supabaseClient.from('sales_quarterly').select('*'),
-    supabaseClient.from('sales_by_district').select('*'),
-    supabaseClient.from('sales_by_type').select('*'),
-    supabaseClient.from('sales').select('sale_date,address,postal_district,eircode,property_type,price').order('sale_date', { ascending: false }).limit(RECENT_LIMIT),
+  const [summaryRes, quarterly, district, type, recent] = await Promise.all([
+    pg('sales_summary', { select: '*' }),
+    pg('sales_quarterly', { select: '*' }),
+    pg('sales_by_district', { select: '*' }),
+    pg('sales_by_type', { select: '*' }),
+    pg('sales', {
+      select: 'sale_date,address,postal_district,eircode,property_type,price,size_description,vat_exclusive,not_full_market_price',
+      order: 'sale_date.desc',
+      limit: RECENT_LIMIT,
+    }),
   ]);
+  if (requestId !== viewRequestId) return; // a newer view request has since started
 
-  if (summary.data) {
-    document.getElementById('stat-total').textContent = summary.data.total_sales.toLocaleString();
-    document.getElementById('stat-median').textContent = eur.format(summary.data.median_price);
-    document.getElementById('stat-districts').textContent = summary.data.district_count;
-    document.getElementById('stat-latest').textContent = dateFmt.format(new Date(summary.data.latest_sale_date));
+  const summary = summaryRes.data?.[0];
+  if (summary) {
+    document.getElementById('stat-total').textContent = summary.total_sales.toLocaleString();
+    document.getElementById('stat-median').textContent = eur.format(summary.median_price);
+    document.getElementById('stat-newbuild').textContent = `${newBuildShareFromCounts(type.data || [])}%`;
+    document.getElementById('stat-latest').textContent = summary.latest_sale_date;
   }
 
+  setChartsMode('aggregate');
   renderQuarterly(quarterly.data || []);
   renderDistrict(district.data || []);
-  renderType(type.data || []);
+  renderType(mergeTypeRows(type.data || []));
   renderTable(recent.data || [], RECENT_LIMIT);
 
   districtOptions = (district.data || []).map((d) => ({
@@ -320,6 +563,24 @@ async function loadDefaultView() {
     sale_count: d.sale_count,
     synonyms: districtSynonyms(d.postal_district),
   }));
+  typeOptions = buildTypeOptions(type.data || []);
+  populateFilterSelects();
+}
+
+function populateFilterSelects() {
+  const currentDistrict = districtSelect.value;
+  districtSelect.replaceChildren(new Option('All districts', ''));
+  for (const d of districtOptions) {
+    districtSelect.appendChild(new Option(`${d.label} (${d.sale_count.toLocaleString()})`, d.label));
+  }
+  districtSelect.value = currentDistrict;
+
+  const currentType = typeSelect.value;
+  typeSelect.replaceChildren(new Option('All property types', ''));
+  for (const t of typeOptions) {
+    typeSelect.appendChild(new Option(`${t.label} (${t.sale_count.toLocaleString()})`, t.label));
+  }
+  typeSelect.value = currentType;
 }
 
 function escapeForFilter(term) {
@@ -333,101 +594,126 @@ function escapeForEircodeFilter(term) {
   return escapeForFilter(term).replace(/\s+/g, '');
 }
 
-// Shared by every "here is a filtered set of sales" view: search, a single
-// district, or a single address's history — table, charts, and stat tiles
-// all read from the same rows so the numbers on screen always agree.
+// Stats + table are shared by every result-set view; chart handling differs
+// (aggregate charts for a filtered list, a dedicated price-history chart for
+// a single address — see setChartsMode), so it's kept separate.
 function applyResultSet(data, cap) {
   renderTable(data, cap);
+  document.getElementById('address-detail').hidden = true; // re-shown by renderAddressDetail when relevant
+  document.getElementById('stat-total').textContent = data.length.toLocaleString();
+  document.getElementById('stat-median').textContent = eur.format(median(data.map((r) => r.price)));
+  document.getElementById('stat-newbuild').textContent = `${newBuildShareFromRows(data)}%`;
+  document.getElementById('stat-latest').textContent = data.length ? data[0].sale_date : '—';
+}
 
+function applyAggregateCharts(data) {
+  setChartsMode('aggregate');
   const agg = aggregateFromRows(data);
   renderQuarterly(agg.quarterly.sort((a, b) => a.quarter.localeCompare(b.quarter)));
   renderDistrict(agg.district);
   renderType(agg.type);
-
-  document.getElementById('stat-total').textContent = data.length.toLocaleString();
-  document.getElementById('stat-median').textContent = eur.format(median(data.map((r) => r.price)));
-  document.getElementById('stat-districts').textContent = new Set(data.map((r) => r.postal_district).filter(Boolean)).size;
-  document.getElementById('stat-latest').textContent = data.length ? dateFmt.format(new Date(data[0].sale_date)) : '—';
 }
 
-async function runSearch(term, includeNonMarket) {
-  const safe = escapeForFilter(term.trim());
-  const safeEircode = escapeForEircodeFilter(term.trim());
-  let query = supabaseClient
-    .from('sales')
-    .select('sale_date,address,postal_district,eircode,property_type,price,not_full_market_price')
-    .or(`address.ilike.%${safe}%,eircode.ilike.%${safeEircode}%,postal_district.ilike.%${safe}%`)
-    .order('sale_date', { ascending: false })
-    .limit(RESULT_LIMIT);
+function buildFilterHeading(term, district, type) {
+  const parts = [];
+  if (term) parts.push(`"${term}"`);
+  if (district) parts.push(district);
+  if (type) parts.push(type); // already a merged label ("New Build" / "Resale")
+  return parts.length ? `Filtered sales — ${parts.join(' · ')}` : 'Recent sales';
+}
 
-  if (!includeNonMarket) query = query.eq('not_full_market_price', false);
+// The single query path behind search text, the district select, the
+// property-type select, and the non-market checkbox — every control reads
+// its own current value here, so no combination of them can go stale or
+// contradict what's on screen (the bug where unchecking the checkbox re-ran
+// a stale search instead of the active view).
+async function runFilteredView() {
+  const requestId = ++viewRequestId;
+  const term = searchInput.value.trim();
+  const district = districtSelect.value;
+  const type = typeSelect.value;
+  const includeNonMarket = nonMarketCheckbox.checked;
 
-  const { data, error } = await query;
+  if (!term && !district && !type && !includeNonMarket) {
+    await loadDefaultView();
+    return;
+  }
+
+  const params = {
+    select: 'sale_date,address,postal_district,eircode,property_type,price,size_description,vat_exclusive,not_full_market_price',
+    order: 'sale_date.desc',
+    limit: RESULT_LIMIT,
+  };
+
+  if (term) {
+    const safe = escapeForFilter(term);
+    const safeEircode = escapeForEircodeFilter(term);
+    params.or = `(address.ilike.%${safe}%,eircode.ilike.%${safeEircode}%,postal_district.ilike.%${safe}%)`;
+  }
+  if (district) params.postal_district = `eq.${district}`;
+  if (type) {
+    // "type" is a merged label ("New Build"); match every raw source string
+    // that folds into it (see PROPERTY_TYPE_LABELS), including the Irish-
+    // language variants, not just the common English one.
+    const group = typeOptions.find((t) => t.label === type);
+    if (group) params.property_type = `in.(${group.values.map((v) => `"${v.replace(/"/g, '\\"')}"`).join(',')})`;
+  }
+  if (!includeNonMarket) params.not_full_market_price = 'eq.false';
+
+  const { data, error } = await pg('sales', params);
+  if (requestId !== viewRequestId) return; // superseded by a newer view request
   if (error) {
     console.error(error);
     return;
   }
 
-  document.getElementById('table-heading').textContent = `Search results for "${term.trim()}"`;
+  document.getElementById('table-heading').textContent = buildFilterHeading(term, district, type);
   applyResultSet(data, RESULT_LIMIT);
-}
-
-async function runDistrictFilter(label) {
-  const { data, error } = await supabaseClient
-    .from('sales')
-    .select('sale_date,address,postal_district,eircode,property_type,price,not_full_market_price')
-    .eq('postal_district', label)
-    .eq('not_full_market_price', false)
-    .order('sale_date', { ascending: false })
-    .limit(RESULT_LIMIT);
-  if (error) {
-    console.error(error);
-    return;
-  }
-  document.getElementById('table-heading').textContent = `Sales in ${label}`;
-  applyResultSet(data, RESULT_LIMIT);
+  applyAggregateCharts(data);
 }
 
 async function runAddressHistory(address) {
+  const requestId = ++viewRequestId;
+  debouncedFilteredView.cancel(); // an in-flight debounced search must not fire later and kick us back out
   hideSuggestions();
   searchInput.value = address;
   toggleClearButton();
 
-  const { data, error } = await supabaseClient
-    .from('sales')
-    .select('sale_date,address,postal_district,eircode,property_type,price,not_full_market_price')
-    .eq('address', address)
-    .order('sale_date', { ascending: false })
-    .limit(RESULT_LIMIT);
+  const { data, error } = await pg('sales', {
+    select: 'sale_date,address,postal_district,eircode,property_type,price,size_description,vat_exclusive,not_full_market_price',
+    address: `eq.${address}`,
+    order: 'sale_date.desc',
+    limit: RESULT_LIMIT,
+  });
+  if (requestId !== viewRequestId) return; // superseded by a newer view request
   if (error) {
     console.error(error);
     return;
   }
   document.getElementById('table-heading').textContent = `Sale history: ${address}`;
   applyResultSet(data, RESULT_LIMIT);
+  setChartsMode('address', data);
+  renderAddressDetail(data);
 }
 
 function debounce(fn, ms) {
   let t;
-  return (...args) => {
+  const debounced = (...args) => {
     clearTimeout(t);
     t = setTimeout(() => fn(...args), ms);
   };
+  debounced.cancel = () => clearTimeout(t);
+  return debounced;
 }
 
 const searchInput = document.getElementById('search');
 const nonMarketCheckbox = document.getElementById('include-non-market');
 const clearButton = document.getElementById('search-clear');
 const suggestionsEl = document.getElementById('suggestions');
+const districtSelect = document.getElementById('filter-district');
+const typeSelect = document.getElementById('filter-type');
 
-const triggerSearch = debounce(() => {
-  const term = searchInput.value.trim();
-  if (term) {
-    runSearch(term, nonMarketCheckbox.checked);
-  } else {
-    loadDefaultView();
-  }
-}, 300);
+const debouncedFilteredView = debounce(runFilteredView, 300);
 
 function toggleClearButton() {
   clearButton.hidden = searchInput.value.length === 0;
@@ -460,12 +746,12 @@ const fetchAddressSuggestions = debounce(async (term) => {
   const safeEircode = escapeForEircodeFilter(term.trim());
   if (!safe) return;
 
-  const { data, error } = await supabaseClient
-    .from('sales')
-    .select('address,postal_district,eircode,sale_date')
-    .or(`address.ilike.%${safe}%,eircode.ilike.%${safeEircode}%`)
-    .order('sale_date', { ascending: false })
-    .limit(30);
+  const { data, error } = await pg('sales', {
+    select: 'address,postal_district,eircode,sale_date',
+    or: `(address.ilike.%${safe}%,eircode.ilike.%${safeEircode}%)`,
+    order: 'sale_date.desc',
+    limit: 30,
+  });
 
   if (error || requestId !== suggestionRequestId) return;
 
@@ -528,10 +814,11 @@ function renderSuggestions(term) {
 
 function selectSuggestion(item) {
   hideSuggestions();
-  searchInput.value = item.value;
-  toggleClearButton();
   if (item.type === 'district') {
-    runDistrictFilter(item.value);
+    searchInput.value = '';
+    toggleClearButton();
+    districtSelect.value = item.value;
+    runFilteredView();
   } else {
     runAddressHistory(item.value);
   }
@@ -559,7 +846,7 @@ searchInput.addEventListener('input', () => {
   const term = searchInput.value.trim();
   renderSuggestions(term);
   if (term) fetchAddressSuggestions(term);
-  triggerSearch();
+  debouncedFilteredView();
 });
 
 searchInput.addEventListener('keydown', (e) => {
@@ -594,11 +881,33 @@ clearButton.addEventListener('click', () => {
   searchInput.value = '';
   toggleClearButton();
   hideSuggestions();
-  loadDefaultView();
+  runFilteredView(); // respects any district/type filter still set, unlike a hard reset
   searchInput.focus();
 });
 
-nonMarketCheckbox.addEventListener('change', triggerSearch);
+districtSelect.addEventListener('change', runFilteredView);
+typeSelect.addEventListener('change', runFilteredView);
+nonMarketCheckbox.addEventListener('change', runFilteredView);
+
+function goHome() {
+  debouncedFilteredView.cancel();
+  searchInput.value = '';
+  districtSelect.value = '';
+  typeSelect.value = '';
+  nonMarketCheckbox.checked = false;
+  toggleClearButton();
+  hideSuggestions();
+  loadDefaultView();
+}
+
+const homeLink = document.getElementById('home-link');
+homeLink.addEventListener('click', goHome);
+homeLink.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    goHome();
+  }
+});
 
 // --- Next refresh countdown (weekly ingest runs Monday 06:00 UTC) ---
 function nextRefreshDate() {

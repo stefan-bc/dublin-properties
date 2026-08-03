@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dublin Property Prices</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231a1a19'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='18' font-weight='700' fill='%233987e5' text-anchor='middle'%3ED%3C/text%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230d0d0d'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='18' font-weight='700' fill='%23ffffff' text-anchor='middle'%3ED%3C/text%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" />
   <link rel="stylesheet" href="style.css" />
@@ -12,7 +12,7 @@
 <body>
   <div class="page">
     <header class="topbar">
-      <h1>Dublin Property Prices</h1>
+      <h1 id="home-link" tabindex="0" role="button" title="Back to overview">Dublin Property Prices</h1>
       <p class="subtitle">
         Every registered residential sale in Dublin since 2010, sourced from the
         <a href="https://www.propertypriceregister.ie" target="_blank" rel="noopener">PSRA Residential Property Price Register</a>.
@@ -35,6 +35,12 @@
         <button id="search-clear" class="search-clear" type="button" aria-label="Clear search" hidden>&times;</button>
         <ul id="suggestions" class="suggestions" role="listbox" hidden></ul>
       </div>
+      <select id="filter-district" class="filter-select" aria-label="Filter by postal district">
+        <option value="">All districts</option>
+      </select>
+      <select id="filter-type" class="filter-select" aria-label="Filter by property type">
+        <option value="">All property types</option>
+      </select>
       <label class="checkbox">
         <input id="include-non-market" type="checkbox" />
         Include non-market-price sales (gifts, transfers)
@@ -52,8 +58,8 @@
         <span class="stat-value" id="stat-median">—</span>
       </div>
       <div class="stat-tile">
-        <span class="stat-label">Postal districts</span>
-        <span class="stat-value" id="stat-districts">—</span>
+        <span class="stat-label">New build share</span>
+        <span class="stat-value" id="stat-newbuild">—</span>
       </div>
       <div class="stat-tile">
         <span class="stat-label">Latest sale recorded</span>
@@ -61,16 +67,17 @@
       </div>
     </section>
 
-    <section class="charts-grid">
-      <div class="chart-card">
-        <h2>Median price by quarter</h2>
+    <p id="charts-empty-note" class="table-hint" hidden>Only one recorded sale for this address — nothing to chart.</p>
+    <section class="charts-grid" id="charts-grid">
+      <div class="chart-card" id="card-quarterly">
+        <h2 id="chart-quarterly-heading">Median price by quarter</h2>
         <canvas id="chart-quarterly" role="img" aria-label="Line chart of median sale price by quarter"></canvas>
       </div>
-      <div class="chart-card">
+      <div class="chart-card" id="card-district">
         <h2>Median price by postal district</h2>
         <canvas id="chart-district" role="img" aria-label="Bar chart of median sale price by Dublin postal district"></canvas>
       </div>
-      <div class="chart-card">
+      <div class="chart-card" id="card-type">
         <h2>Median price by property type</h2>
         <canvas id="chart-type" role="img" aria-label="Bar chart of median sale price by property type"></canvas>
       </div>
@@ -80,6 +87,10 @@
       <div class="table-card-head">
         <h2 id="table-heading">Recent sales</h2>
         <span class="table-hint">Click an address for its full sale history</span>
+      </div>
+      <div id="address-detail" class="address-detail" hidden>
+        <span id="address-detail-meta"></span>
+        <a id="address-detail-map" class="map-link" target="_blank" rel="noopener">View on Google Maps ↗</a>
       </div>
       <div class="table-scroll">
         <table>
@@ -91,6 +102,7 @@
               <th>Eircode</th>
               <th>Type</th>
               <th class="num">Price</th>
+              <th>Notes</th>
             </tr>
           </thead>
           <tbody id="table-body"></tbody>
@@ -104,7 +116,6 @@
     </footer>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="config.js"></script>
   <script src="app.js"></script>

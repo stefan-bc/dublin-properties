@@ -8,10 +8,8 @@
   --baseline: #383835;
   --border: rgba(255, 255, 255, 0.1);
 
-  --series-1: #3987e5; /* blue   */
-  --series-2: #d95926; /* orange */
-  --series-3: #199e70; /* aqua   */
-  --series-4: #c98500; /* yellow */
+  --series-1: #3987e5; /* blue */
+  --series-2: #199e70; /* teal */
 }
 
 * {
@@ -42,6 +40,17 @@ a {
   font-weight: 700;
   margin: 0 0 8px;
   letter-spacing: -0.02em;
+  width: fit-content;
+  cursor: pointer;
+}
+
+.topbar h1:hover {
+  color: var(--series-1);
+}
+
+.topbar h1:focus-visible {
+  outline: 2px solid var(--series-1);
+  outline-offset: 4px;
 }
 
 .subtitle {
@@ -162,6 +171,22 @@ a {
   background: rgba(57, 135, 229, 0.14);
 }
 
+.filter-select {
+  flex: none;
+  background: var(--page);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 9px 10px;
+}
+
+.filter-select:focus {
+  outline: 2px solid var(--series-1);
+  outline-offset: -1px;
+}
+
 .checkbox {
   display: flex;
   align-items: center;
@@ -264,6 +289,33 @@ a {
   font-size: 11px;
 }
 
+.address-detail {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  background: var(--page);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.address-detail[hidden] {
+  display: none;
+}
+
+#address-detail-meta {
+  color: var(--text-secondary);
+}
+
+.map-link {
+  flex: none;
+  color: var(--series-1);
+  white-space: nowrap;
+}
+
 td.address-cell {
   cursor: pointer;
 }
@@ -271,6 +323,31 @@ td.address-cell {
 td.address-cell:hover {
   color: var(--series-1);
   text-decoration: underline;
+}
+
+td.notes-cell {
+  white-space: normal;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.note-size {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 
 .table-scroll {
@@ -313,4 +390,52 @@ tbody tr:hover {
   margin-top: 32px;
   color: var(--text-muted);
   font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 20px 14px 48px;
+  }
+
+  .topbar h1 {
+    font-size: 22px;
+  }
+
+  /* CSS Grid tracks don't shrink below their minmax floor the way flex items
+     wrap — at 340px minimum, three chart cards would force horizontal page
+     overflow on any phone narrower than ~380px. One column below 640px. */
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-card canvas {
+    max-height: 220px;
+  }
+
+  .stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-select {
+    width: 100%;
+  }
+
+  .result-note {
+    margin-left: 0;
+  }
+
+  .checkbox {
+    white-space: normal;
+  }
+
+  .address-detail {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
 }
