@@ -85,7 +85,7 @@ npx serve .
 ## Status
 
 - [x] Schema, ETL script, ingest workflow, dashboard written
-- [ ] Schema applied to Supabase (SQL editor: https://supabase.com/dashboard/project/ivtgyiobltlwoybwbvev/sql/new)
+- [x] Schema applied to Supabase
 - [x] Anon key added to `config.js`
-- [ ] First ingest run
+- [x] First ingest run — 249,311 Dublin rows loaded, verified end-to-end in a real browser
 - [ ] Deployed to Cloudflare Pages under `dublin.ectoplasma.org`
