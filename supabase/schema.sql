@@ -69,6 +69,7 @@ where property_type is not null
 group by 1
 order by 2 desc;
 
+drop view if exists sales_summary;
 create or replace view sales_summary as
 select
   count(*) as total_sales,
@@ -82,18 +83,23 @@ grant select on sales_quarterly, sales_by_district, sales_by_type, sales_summary
 -- are free-text and don't always match how people type them — exact-substring
 -- (ilike) matching misses a lookup on a single typo. This ranks matches by
 -- pg_trgm word_similarity: how closely the typed term matches some extent of
--- the stored address or Eircode. The `set ... threshold` applies for the
--- duration of the call so the GIN trigram indexes below can serve the <%
--- operator; even without them a scan over ~250k rows is fine for a debounced
--- search. Runs as the invoker, so RLS's public read policy governs it like
--- any other query. PostgREST calls it as an RPC with the term bound as a
--- parameter (see app.js fetchAddressSuggestions).
+-- the stored address or Eircode. The threshold is set via set_config() as
+-- the function's first statement rather than a function-level
+-- `set pg_trgm.word_similarity_threshold = ...` clause — Supabase's managed
+-- `postgres` role can SET that GUC at session level but is denied
+-- permission to set it as function config (proconfig), so this is the only
+-- way to get the <% operator to pick up the threshold and use the GIN
+-- trigram indexes below; without them, word_similarity() over all ~250k
+-- rows blows past PostgREST's statement timeout. Runs as the invoker, so
+-- RLS's public read policy governs it like any other query. PostgREST calls
+-- it as an RPC with the term bound as a parameter (see app.js
+-- fetchAddressSuggestions).
 create or replace function search_sales(search_term text, max_results integer default 10)
 returns table (address text, postal_district text, eircode text, sale_date date)
 language sql
 stable
-set pg_trgm.word_similarity_threshold = 0.2
 as $$
+  select set_config('pg_trgm.word_similarity_threshold', '0.2', true);
   -- Terms under three characters have too few trigrams to mean anything (a
   -- bare "d" would match nearly every address) — refuse them here rather
   -- than return a flood of noise; district suggestions already cover short
