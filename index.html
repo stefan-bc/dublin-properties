@@ -68,6 +68,7 @@
     </section>
 
     <p id="charts-empty-note" class="table-hint" hidden>Only one recorded sale for this address — nothing to chart.</p>
+    <p id="charts-cap-note" class="table-hint" hidden></p>
     <section class="charts-grid" id="charts-grid">
       <div class="chart-card" id="card-quarterly">
         <h2 id="chart-quarterly-heading">Median price by quarter</h2>
@@ -136,9 +137,13 @@
     </footer>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"
+    integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ"
+    crossorigin="anonymous"
+  ></script>
   <script src="config.js"></script>
   <script src="dublin-districts.js"></script>
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

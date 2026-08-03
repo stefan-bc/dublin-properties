@@ -72,8 +72,7 @@ create or replace view sales_summary as
 select
   count(*) as total_sales,
   percentile_cont(0.5) within group (order by price) as median_price,
-  max(sale_date) as latest_sale_date,
-  count(distinct postal_district) as district_count
+  max(sale_date) as latest_sale_date
 from sales;
 
 grant select on sales_quarterly, sales_by_district, sales_by_type, sales_summary to anon, authenticated;

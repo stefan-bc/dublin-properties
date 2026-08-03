@@ -1,3 +1,5 @@
+import { escapeForFilter, escapeForEircodeFilter, shortSize } from './lib.js';
+
 // Plain fetch against PostgREST instead of @supabase/supabase-js — this
 // dashboard only ever runs simple SELECTs with the public anon key. The SDK
 // bundles Auth, Realtime (a WebSocket client), and Storage, none of which
@@ -5,11 +7,19 @@
 const REST_URL = `${SUPABASE_URL}/rest/v1`;
 const REST_HEADERS = { apikey: SUPABASE_ANON_KEY };
 
-async function pg(table, params) {
+// exactCount asks PostgREST for the true total matching the filter (via a
+// Content-Range response header) in the same request as the capped page of
+// rows — one round trip, not two. Needed so a capped result set can still
+// show its real total instead of just the page size (see runFilteredView).
+async function pg(table, params, { exactCount = false } = {}) {
   const qs = new URLSearchParams(params).toString();
-  const res = await fetch(`${REST_URL}/${table}?${qs}`, { headers: REST_HEADERS });
-  if (!res.ok) return { data: null, error: await res.text() };
-  return { data: await res.json(), error: null };
+  const headers = exactCount ? { ...REST_HEADERS, Prefer: 'count=exact' } : REST_HEADERS;
+  const res = await fetch(`${REST_URL}/${table}?${qs}`, { headers });
+  if (!res.ok) return { data: null, error: await res.text(), count: null };
+  const data = await res.json();
+  if (!exactCount) return { data, error: null, count: null };
+  const total = res.headers.get('content-range')?.split('/')[1];
+  return { data, error: null, count: total && total !== '*' ? Number.parseInt(total, 10) : data.length };
 }
 
 const eur = new Intl.NumberFormat('en-IE', {
@@ -612,21 +622,6 @@ function aggregateFromRows(rows) {
   };
 }
 
-// PPR only records size as a coarse sentence ("greater than or equal to 38
-// sq metres and less than 125 sq metres"); this pulls out just the numbers
-// for a table cell. Falls back to the raw sentence for any phrasing it
-// doesn't recognise, so nothing is silently dropped.
-function shortSize(desc) {
-  if (!desc) return null;
-  const range = desc.match(/greater than or equal to (\d+) sq metres and less than (\d+) sq metres/i);
-  if (range) return `${range[1]}–${range[2]} m²`;
-  const min = desc.match(/greater than or equal to (\d+) sq metres/i);
-  if (min) return `≥${min[1]} m²`;
-  const max = desc.match(/less than (\d+) sq metres/i);
-  if (max) return `<${max[1]} m²`;
-  return desc;
-}
-
 function renderNotesCell(r) {
   const td = document.createElement('td');
   td.className = 'notes-cell';
@@ -670,7 +665,7 @@ function setViewLoading(loading) {
   document.querySelector('.page').classList.toggle('view-loading', loading);
 }
 
-function renderTable(rows, cap) {
+function renderTable(rows, cap, trueTotal) {
   const body = document.getElementById('table-body');
   body.replaceChildren();
   rows.forEach((r, i) => {
@@ -711,7 +706,13 @@ function renderTable(rows, cap) {
   });
   const note = document.getElementById('result-note');
   if (rows.length >= cap) {
-    note.textContent = `Showing first ${cap} matches`;
+    // trueTotal (from PostgREST's exact count, see pg()) is the real match
+    // count; rows.length is just this page. Show both rather than implying
+    // "first 200" is close to the whole story when it might be 1 of 30 pages.
+    note.textContent =
+      trueTotal && trueTotal > cap
+        ? `Showing ${cap} of ${trueTotal.toLocaleString()} matches`
+        : `Showing first ${cap} matches`;
   } else {
     note.textContent = `${rows.length} result${rows.length === 1 ? '' : 's'}`;
   }
@@ -722,6 +723,7 @@ async function loadDefaultView() {
   document.getElementById('table-heading').textContent = 'Recent sales';
   document.getElementById('result-note').textContent = '';
   document.getElementById('address-detail').hidden = true;
+  document.getElementById('charts-cap-note').hidden = true; // sales_summary is a true full-table aggregate, never capped
   document.getElementById('stats').classList.add('is-loading');
   setViewLoading(true);
 
@@ -781,27 +783,32 @@ function populateFilterSelects() {
   typeSelect.value = currentType;
 }
 
-function escapeForFilter(term) {
-  return term.replace(/[%,"\\]/g, '');
-}
-
-// Stored Eircodes have no space ("D03C640"); people type them either way
-// ("D03 C640" or "D03C640"), so match against a space-stripped copy of the
-// term on that column only — address/district text still wants real spaces.
-function escapeForEircodeFilter(term) {
-  return escapeForFilter(term).replace(/\s+/g, '');
-}
-
 // Stats + table are shared by every result-set view; chart handling differs
 // (aggregate charts for a filtered list, a dedicated price-history chart for
 // a single address — see setChartsMode), so it's kept separate.
-function applyResultSet(data, cap) {
-  renderTable(data, cap);
+//
+// trueTotal is the real count of matching rows (see pg()'s exactCount), which
+// can be far larger than `data` when the result set is capped at `cap`.
+// "Total sales" uses it directly since that's cheap and exact; median/new
+// build share/charts are still derived from just the capped `data` (a true
+// aggregate over an arbitrary filter would need a database round trip per
+// stat, or a bespoke RPC) — capped-note() below says so rather than quietly
+// presenting a 200-row sample as if it were the full picture.
+function applyResultSet(data, cap, trueTotal) {
+  renderTable(data, cap, trueTotal);
   document.getElementById('address-detail').hidden = true; // re-shown by renderAddressDetail when relevant
-  setStat('stat-total', data.length.toLocaleString());
+  setStat('stat-total', (trueTotal ?? data.length).toLocaleString());
   setStat('stat-median', eur.format(median(data.map((r) => r.price))));
   setStat('stat-newbuild', `${newBuildShareFromRows(data)}%`);
   setStat('stat-latest', data.length ? data[0].sale_date : '—');
+
+  const capNote = document.getElementById('charts-cap-note');
+  if (trueTotal && trueTotal > cap) {
+    capNote.textContent = `Median, new build share and charts below reflect only the ${cap.toLocaleString()} shown sales, not all ${trueTotal.toLocaleString()}.`;
+    capNote.hidden = false;
+  } else {
+    capNote.hidden = true;
+  }
 }
 
 function applyAggregateCharts(data) {
@@ -849,7 +856,7 @@ async function runFilteredView() {
   if (term) {
     const safe = escapeForFilter(term);
     const safeEircode = escapeForEircodeFilter(term);
-    params.or = `(address.ilike.%${safe}%,eircode.ilike.%${safeEircode}%,postal_district.ilike.%${safe}%)`;
+    params.or = `(address.ilike."%${safe}%",eircode.ilike."%${safeEircode}%",postal_district.ilike."%${safe}%")`;
   }
   if (district) params.postal_district = `eq.${district}`;
   if (type) {
@@ -861,7 +868,7 @@ async function runFilteredView() {
   }
   if (!includeNonMarket) params.not_full_market_price = 'eq.false';
 
-  const { data, error } = await pg('sales', params);
+  const { data, error, count } = await pg('sales', params, { exactCount: true });
   if (requestId !== viewRequestId) return; // superseded by a newer view request
   if (error) {
     console.error(error);
@@ -870,7 +877,7 @@ async function runFilteredView() {
   }
 
   document.getElementById('table-heading').textContent = buildFilterHeading(term, district, type);
-  applyResultSet(data, RESULT_LIMIT);
+  applyResultSet(data, RESULT_LIMIT, count);
   applyAggregateCharts(data);
   setViewLoading(false);
 }
@@ -883,12 +890,16 @@ async function runAddressHistory(address) {
   toggleClearButton();
   setViewLoading(true);
 
-  const { data, error } = await pg('sales', {
-    select: 'sale_date,address,postal_district,eircode,property_type,price,size_description,vat_exclusive,not_full_market_price',
-    address: `eq.${address}`,
-    order: 'sale_date.desc',
-    limit: RESULT_LIMIT,
-  });
+  const { data, error, count } = await pg(
+    'sales',
+    {
+      select: 'sale_date,address,postal_district,eircode,property_type,price,size_description,vat_exclusive,not_full_market_price',
+      address: `eq.${address}`,
+      order: 'sale_date.desc',
+      limit: RESULT_LIMIT,
+    },
+    { exactCount: true },
+  );
   if (requestId !== viewRequestId) return; // superseded by a newer view request
   if (error) {
     console.error(error);
@@ -896,7 +907,7 @@ async function runAddressHistory(address) {
     return;
   }
   document.getElementById('table-heading').textContent = `Sale history: ${address}`;
-  applyResultSet(data, RESULT_LIMIT);
+  applyResultSet(data, RESULT_LIMIT, count);
   setChartsMode('address', data);
   renderAddressDetail(data);
   setViewLoading(false);
@@ -956,7 +967,7 @@ const fetchAddressSuggestions = debounce(async (term) => {
 
   const { data, error } = await pg('sales', {
     select: 'address,postal_district,eircode,sale_date',
-    or: `(address.ilike.%${safe}%,eircode.ilike.%${safeEircode}%)`,
+    or: `(address.ilike."%${safe}%",eircode.ilike."%${safeEircode}%")`,
     order: 'sale_date.desc',
     limit: 30,
   });

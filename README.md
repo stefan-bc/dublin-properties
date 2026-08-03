@@ -7,7 +7,7 @@ stored in Supabase, and shown on a small dark-themed dashboard with instant
 type-ahead search by address, Eircode, or postal district, and a drill-down
 into any single address's full sale history.
 
-Live at: `dublin.ectoplasma.org` (once deployed — see Setup).
+Live at: `dublin-properties.pages.dev` (custom domain `dublin.ectoplasma.org` not yet attached — see Setup/Status).
 
 ## Architecture
 
@@ -101,6 +101,18 @@ No build step. Serve the directory and open it:
 ```
 npx serve .
 ```
+
+`escapeForFilter`/`escapeForEircodeFilter`/`shortSize` (dashboard) and
+`parseDate`/`parsePrice`/`derivePostalDistrict` (ingest) are split out into
+`lib.js`/`scripts/lib.mjs` so they're importable from a plain Node test —
+`app.js` itself touches the DOM at load time and can't run outside a browser.
+
+```
+npm test     # node --test, tests/
+npm run lint # eslint .
+```
+
+CI (`.github/workflows/ci.yml`) runs both on every push/PR.
 
 ## Known limitations
 
