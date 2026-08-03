@@ -176,7 +176,7 @@ Chart.defaults.animation = { duration: 450, easing: 'easeOutQuart' }; // subtle,
 const RESULT_LIMIT = 200;
 const RECENT_LIMIT = 50;
 
-let quarterlyChart, districtChart, typeChart;
+let quarterlyChart, districtChart, typeChart, planningChart;
 let districtOptions = [];
 let typeOptions = [];
 let addressMatches = [];
@@ -215,6 +215,8 @@ let restoringView = 0;
 // "Searching…" state for the search box — a search is pending from the moment
 // a keystroke schedules one until the latest view's results land.
 let searchPending = false;
+// Ref-count for in-flight address-suggestion RPCs (see setSuggestionsPending).
+let suggestionsRefs = 0;
 
 function districtSynonyms(label) {
   const syns = [label.toLowerCase()];
@@ -557,6 +559,143 @@ function renderType(rows) {
   });
 }
 
+// --- CSO planning permissions (BHQ13) ---
+// Dwelling units granted planning permission in Dublin, quarterly, straight
+// from the CSO's open-data API (JSON-stat 2.0, no key). This is a one-shot
+// third-party fetch, unrelated to the Supabase pipeline — it loads once on
+// startup, isn't tied to any view, and if the CSO is unreachable the card
+// hides itself quietly rather than taking the dashboard down.
+const CSO_PLANNING_URL = 'https://ws.cso.ie/public/api.restful/PxStat.Data.Cube_API.ReadDataset/BHQ13/JSON-stat/2.0/en';
+
+// CSO quarter codes are "2018Q1"; the rest of the dashboard renders quarters
+// as "2018 Q1", so normalise to match.
+function formatPlanningQuarter(code) {
+  return code.replace(/^(\d{4})Q(\d)$/, '$1 Q$2');
+}
+
+// The CSO suppresses small cells (too few observations to publish safely)
+// with "." / ".." — a suppressed count is NOT a zero, so such cells parse to
+// null and the chart draws a gap instead of a misleading dip.
+function planningValue(raw) {
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+  const t = `${raw}`.trim();
+  return /^[0-9]+$/.test(t) ? Number.parseInt(t, 10) : null;
+}
+
+// Returns the position of `label` within a JSON-stat dimension's own
+// category.index order (not the code — the label), or -1 if absent.
+function planningDimIndex(cube, dimId, label) {
+  const dim = cube.dimension[dimId];
+  return dim.category.index.findIndex((code) => dim.category.label[code] === label);
+}
+
+// BHQ13's cube dimensions are [statistic, quarter, construction type,
+// functional category, region] and `cube.value` is flattened in that order.
+// Each value's flat index is the dot product of per-dimension positions and
+// strides, where stride[i] = product of the category sizes of every
+// dimension after i. Work the strides out generically from j.id and the
+// dimensions' own sizes, and resolve "Dublin" / "Dwellings" / "All types of
+// construction" from the labels, so nothing here assumes a fixed layout.
+function planningSeries(cube) {
+  const dims = cube.id;
+  const size = (id) => cube.dimension[id].category.index.length;
+  const stride = dims.map((id, i) => dims.slice(i + 1).reduce((acc, laterId) => acc * size(laterId), 1));
+
+  const QUARTER = 'TLIST(Q1)';
+  const CONSTRUCTION = 'C01921V02511';
+  const CATEGORY = 'C02074V02506';
+  const REGION = 'C02196V04140';
+
+  const regionIdx = planningDimIndex(cube, REGION, 'Dublin');
+  const categoryIdx = planningDimIndex(cube, CATEGORY, 'Dwellings');
+  const constructionIdx = planningDimIndex(cube, CONSTRUCTION, 'All types of construction');
+  if (regionIdx < 0 || categoryIdx < 0 || constructionIdx < 0) {
+    throw new Error('CSO BHQ13 cube missing expected labels');
+  }
+
+  const quarterCodes = cube.dimension[QUARTER].category.index;
+  const flatIndex = (q) =>
+    stride.reduce((acc, s, i) => acc + (dims[i] === QUARTER ? q : 0) * s, 0) +
+    constructionIdx * stride[dims.indexOf(CONSTRUCTION)] +
+    categoryIdx * stride[dims.indexOf(CATEGORY)] +
+    regionIdx * stride[dims.indexOf(REGION)];
+
+  return quarterCodes.map((code, q) => ({
+    label: formatPlanningQuarter(code),
+    value: planningValue(cube.value[flatIndex(q)]),
+  }));
+}
+
+function renderPlanning(points) {
+  const ctx = document.getElementById('chart-planning');
+  planningChart = upsertChart(planningChart, ctx, {
+    type: 'line',
+    data: {
+      labels: points.map((p) => p.label),
+      datasets: [
+        {
+          data: points.map((p) => p.value),
+          borderColor: palette.series2,
+          backgroundColor: palette.series2 + '1a',
+          borderWidth: 2,
+          pointRadius: 2,
+          pointBackgroundColor: palette.series2,
+          pointBorderColor: '#1a1a19',
+          pointBorderWidth: 1,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: palette.series2,
+          pointHoverBorderColor: '#1a1a19',
+          pointHoverBorderWidth: 2,
+          fill: true,
+          tension: 0.15,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          ...tooltipBase(),
+          callbacks: {
+            // Counts, not prices — the eurCompact axis callback in baseScales
+            // doesn't fit here, so this chart's scales are spelled out.
+            label: (c) => (c.parsed.y == null ? 'No data' : `${c.parsed.y.toLocaleString()} dwelling units`),
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { color: palette.gridline, display: false },
+          border: { color: palette.baseline },
+          ticks: { color: palette.textMuted, maxTicksLimit: 10 },
+        },
+        y: {
+          grid: { color: palette.gridline },
+          border: { display: false },
+          ticks: { color: palette.textMuted },
+          beginAtZero: true,
+        },
+      },
+    },
+  });
+}
+
+async function loadPlanningPermissions() {
+  try {
+    const res = await fetch(CSO_PLANNING_URL);
+    if (!res.ok) throw new Error(`CSO planning API responded ${res.status}`);
+    renderPlanning(planningSeries(await res.json()));
+  } catch (e) {
+    // A third-party API being down must not break the dashboard — hide the
+    // card and leave a console note instead of throwing.
+    console.warn('Could not load CSO planning-permission data:', e);
+    document.getElementById('card-planning').hidden = true;
+  }
+}
+
 // A single address is always exactly one district and one property type, so
 // those two charts are structurally meaningless there — hide them rather than
 // show a one-bar "chart" that isn't telling the reader anything. The quarterly
@@ -691,13 +830,25 @@ function setStat(id, text) {
   el.classList.add('flash');
 }
 
-// Toggles the "Searching…" indicator in the search box. Idempotent — the
-// first keystroke switches it on and the winning request's completion (or an
-// error) switches it off; superseded requests leave it alone.
+// Toggles the loading indicator in the search box. A search is pending from
+// the first keystroke until the winning view request lands, and separately
+// until the address-suggestion RPC lands — the two can run at very different
+// speeds, so the indicator stays on until BOTH are done (the suggestions call
+// is ref-counted; overlapping superseded calls release their own reference
+// via finally). Idempotent: superseded requests leave the state alone.
 function setSearchPending(pending) {
   if (searchPending === pending) return;
   searchPending = pending;
-  document.getElementById('search-status').hidden = !pending;
+  updateSearchStatus();
+}
+
+function setSuggestionsPending(pending) {
+  suggestionsRefs = Math.max(0, suggestionsRefs + (pending ? 1 : -1));
+  updateSearchStatus();
+}
+
+function updateSearchStatus() {
+  document.getElementById('search-status').hidden = !(searchPending || suggestionsRefs > 0);
 }
 
 // Dims stats/charts/table while a view is being (re)loaded, so filtering
@@ -1189,20 +1340,27 @@ const fetchAddressSuggestions = debounce(async (term) => {
 
   // The term goes straight to the RPC as a bound parameter — no PostgREST
   // filter syntax is built here, so no escaping (or injection) is involved.
-  const { data, error } = await pg(
-    'rpc/search_sales',
-    { search_term: q, max_results: 30 },
-    { signal: suggestAbort.signal },
-  );
+  // This call runs ~3x slower than the main view's RPC, so it holds its own
+  // reference on the loading indicator (released in the finally below).
+  setSuggestionsPending(true);
+  try {
+    const { data, error } = await pg(
+      'rpc/search_sales',
+      { search_term: q, max_results: 30 },
+      { signal: suggestAbort.signal },
+    );
 
-  if (error || !data || requestId !== suggestionRequestId) return;
+    if (error || !data || requestId !== suggestionRequestId) return;
 
-  const seen = new Map();
-  for (const row of data) {
-    if (!seen.has(row.address)) seen.set(row.address, row);
+    const seen = new Map();
+    for (const row of data) {
+      if (!seen.has(row.address)) seen.set(row.address, row);
+    }
+    addressMatches = [...seen.values()].slice(0, 5);
+    renderSuggestions(term);
+  } finally {
+    setSuggestionsPending(false);
   }
-  addressMatches = [...seen.values()].slice(0, 5);
-  renderSuggestions(term);
 }, 120);
 
 function currentSuggestionItems(term) {
@@ -1378,3 +1536,4 @@ updateCountdown();
 setInterval(updateCountdown, 1000);
 
 loadInitialView();
+loadPlanningPermissions();
