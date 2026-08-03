@@ -941,8 +941,9 @@ function toggleClearButton() {
 // --- Instant suggestions: district matches are computed client-side against
 // the small (~30 row) district list already in memory, so they render on the
 // same keystroke with no network round trip. Address matches follow shortly
-// after via a short-debounced, trigram-indexed query, and are appended to
-// the same dropdown rather than gating it.
+// after via a short-debounced call to the search_sales RPC, which ranks rows
+// by pg_trgm word-similarity — so a typo or partial word still finds the
+// address — and are appended to the same dropdown rather than gating it.
 
 function matchDistricts(term) {
   const q = term.toLowerCase();
@@ -961,16 +962,12 @@ function matchDistricts(term) {
 
 const fetchAddressSuggestions = debounce(async (term) => {
   const requestId = ++suggestionRequestId;
-  const safe = escapeForFilter(term.trim());
-  const safeEircode = escapeForEircodeFilter(term.trim());
-  if (!safe) return;
+  const q = term.trim();
+  if (!q) return;
 
-  const { data, error } = await pg('sales', {
-    select: 'address,postal_district,eircode,sale_date',
-    or: `(address.ilike."%${safe}%",eircode.ilike."%${safeEircode}%")`,
-    order: 'sale_date.desc',
-    limit: 30,
-  });
+  // The term goes straight to the RPC as a bound parameter — no PostgREST
+  // filter syntax is built here, so no escaping (or injection) is involved.
+  const { data, error } = await pg('rpc/search_sales', { search_term: q, max_results: 30 });
 
   if (error || requestId !== suggestionRequestId) return;
 

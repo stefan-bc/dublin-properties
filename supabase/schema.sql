@@ -76,3 +76,37 @@ select
 from sales;
 
 grant select on sales_quarterly, sales_by_district, sales_by_type, sales_summary to anon, authenticated;
+
+-- Fuzzy address search for the dashboard's suggestion dropdown. PPR addresses
+-- are free-text and don't always match how people type them — exact-substring
+-- (ilike) matching misses a lookup on a single typo. This ranks matches by
+-- pg_trgm word_similarity: how closely the typed term matches some extent of
+-- the stored address or Eircode. The `set ... threshold` applies for the
+-- duration of the call so the GIN trigram indexes below can serve the <%
+-- operator; even without them a scan over ~250k rows is fine for a debounced
+-- search. Runs as the invoker, so RLS's public read policy governs it like
+-- any other query. PostgREST calls it as an RPC with the term bound as a
+-- parameter (see app.js fetchAddressSuggestions).
+create or replace function search_sales(search_term text, max_results integer default 10)
+returns table (address text, postal_district text, eircode text, sale_date date)
+language sql
+stable
+set pg_trgm.word_similarity_threshold = 0.2
+as $$
+  -- Terms under three characters have too few trigrams to mean anything (a
+  -- bare "d" would match nearly every address) — refuse them here rather
+  -- than return a flood of noise; district suggestions already cover short
+  -- input client-side.
+  select s.address, s.postal_district, s.eircode, s.sale_date
+  from sales s
+  where length(search_term) >= 3
+    and (search_term <% s.address or (s.eircode is not null and search_term <% s.eircode))
+  order by greatest(
+             word_similarity(search_term, s.address),
+             case when s.eircode is not null then word_similarity(search_term, s.eircode) else 0 end
+           ) desc,
+           s.sale_date desc
+  limit max_results;
+$$;
+
+grant execute on function search_sales(text, integer) to anon, authenticated;

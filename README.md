@@ -47,7 +47,9 @@ PPR CSV (weekly)  →  GitHub Action (scripts/ingest.mjs)  →  Supabase Postgre
   term, then clicking an address before that search's own query returns).
   The search box shows an instant suggestions dropdown: postal-district
   matches come from a small list already held in memory (zero network round
-  trip), address matches follow ~120ms later from a trigram-indexed query.
+  trip), address matches follow ~120ms later from a pg_trgm word-similarity
+  query (a `search_sales` RPC) — typo-tolerant, since PPR addresses are
+  free-text and rarely match exactly how people type them.
   Clicking an address (a suggestion, or any row in the results table) shows
   its full sale history, property type, size, Eircode, and district — always
   labeled, never silently blank — plus a Google Maps link. Charts and stat
