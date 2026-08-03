@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dublin Property Prices</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231a1a19'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='18' font-weight='700' fill='%233987e5' text-anchor='middle'%3ED%3C/text%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" />
   <link rel="stylesheet" href="style.css" />
@@ -15,17 +16,25 @@
       <p class="subtitle">
         Every registered residential sale in Dublin since 2010, sourced from the
         <a href="https://www.propertypriceregister.ie" target="_blank" rel="noopener">PSRA Residential Property Price Register</a>.
-        Refreshed monthly.
+        Refreshed weekly — next refresh in <span id="refresh-countdown">—</span>.
       </p>
     </header>
 
     <div class="filters">
-      <input
-        id="search"
-        type="text"
-        placeholder="Search by address, Eircode, or postal district (e.g. D02, Rathmines)…"
-        autocomplete="off"
-      />
+      <div class="search-wrap">
+        <input
+          id="search"
+          type="text"
+          placeholder="Search by address, Eircode, or postal district (e.g. D02, Rathmines)…"
+          autocomplete="off"
+          role="combobox"
+          aria-expanded="false"
+          aria-controls="suggestions"
+          aria-autocomplete="list"
+        />
+        <button id="search-clear" class="search-clear" type="button" aria-label="Clear search" hidden>&times;</button>
+        <ul id="suggestions" class="suggestions" role="listbox" hidden></ul>
+      </div>
       <label class="checkbox">
         <input id="include-non-market" type="checkbox" />
         Include non-market-price sales (gifts, transfers)
@@ -68,7 +77,10 @@
     </section>
 
     <section class="table-card">
-      <h2 id="table-heading">Recent sales</h2>
+      <div class="table-card-head">
+        <h2 id="table-heading">Recent sales</h2>
+        <span class="table-hint">Click an address for its full sale history</span>
+      </div>
       <div class="table-scroll">
         <table>
           <thead>

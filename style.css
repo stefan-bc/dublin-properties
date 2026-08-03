@@ -50,6 +50,11 @@ a {
   max-width: 70ch;
 }
 
+#refresh-countdown {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
 .filters {
   display: flex;
   flex-wrap: wrap;
@@ -62,20 +67,99 @@ a {
   margin-bottom: 24px;
 }
 
-#search {
+.search-wrap {
+  position: relative;
   flex: 1 1 320px;
+}
+
+#search {
+  width: 100%;
   background: var(--page);
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text-primary);
   font-family: inherit;
   font-size: 13px;
-  padding: 9px 12px;
+  padding: 9px 34px 9px 12px;
 }
 
 #search:focus {
   outline: 2px solid var(--series-1);
   outline-offset: -1px;
+}
+
+.search-clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.search-clear:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.suggestions {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.suggestions .group-label {
+  padding: 6px 8px 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.suggestions li.option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.suggestions li.option .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestions li.option .meta {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.suggestions li.option:hover,
+.suggestions li.option.active {
+  background: rgba(57, 135, 229, 0.14);
 }
 
 .checkbox {
@@ -164,7 +248,29 @@ a {
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin: 0 0 14px;
+  margin: 0;
+}
+
+.table-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.table-hint {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+td.address-cell {
+  cursor: pointer;
+}
+
+td.address-cell:hover {
+  color: var(--series-1);
+  text-decoration: underline;
 }
 
 .table-scroll {

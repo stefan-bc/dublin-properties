@@ -43,15 +43,27 @@ function parsePrice(raw) {
   return Number.parseFloat(raw.replace(/[^0-9.]/g, ''));
 }
 
-// Dublin postal-district Eircode routing keys are D01-D18, D20, D22, D24, D6W.
-// Prefer the Eircode when present (reliable); fall back to the address text.
+// The only postal districts that actually exist: 1-18, 20, 22, 24, 6W (no 19,
+// 21, 23). PPR is raw, unedited data (PSRA's own disclaimer) with genuine
+// address typos like "Dublin 91" or "Dublin 67" — validate against this set
+// rather than trust whatever digits follow the word "Dublin".
+const VALID_DUBLIN_DISTRICTS = new Set([
+  '1', '2', '3', '4', '5', '6', '6W', '7', '8', '9', '10',
+  '11', '12', '13', '14', '15', '16', '17', '18', '20', '22', '24',
+]);
+
+// Eircode routing keys map 1:1 to postal districts. Prefer the Eircode when
+// present (reliable); fall back to the address text.
 function derivePostalDistrict(county, address, eircode) {
   if (eircode && /^D\d[0-9W]/i.test(eircode)) {
     const suffix = eircode.slice(1, 3).toUpperCase().replace(/^0/, '');
-    return `Dublin ${suffix}`;
+    if (VALID_DUBLIN_DISTRICTS.has(suffix)) return `Dublin ${suffix}`;
   }
   const match = address.match(/Dublin\s*(\d{1,2}W?)\b/i);
-  if (match) return `Dublin ${match[1].toUpperCase()}`;
+  if (match) {
+    const suffix = match[1].toUpperCase().replace(/^0/, '');
+    if (VALID_DUBLIN_DISTRICTS.has(suffix)) return `Dublin ${suffix}`;
+  }
   if (county === 'Dublin') return 'Co. Dublin';
   return null;
 }
@@ -102,7 +114,15 @@ async function main() {
   const dublinRows = records.filter((r) => r.County?.trim() === 'Dublin').map(toSaleRow);
   console.log(`Filtered to ${dublinRows.length} Dublin rows`);
 
-  await upsertBatches(dublinRows);
+  // A handful of rows share the same (date, address, price) — e.g. identical
+  // new-build units sold the same day at the same price with a non-unit-level
+  // address. They're indistinguishable under our dedupe key, so collapse them
+  // rather than let ON CONFLICT choke on updating the same row twice.
+  const dedupedRows = [...new Map(dublinRows.map((r) => [r.id, r])).values()];
+  const dupeCount = dublinRows.length - dedupedRows.length;
+  if (dupeCount > 0) console.log(`Collapsed ${dupeCount} duplicate (date, address, price) rows`);
+
+  await upsertBatches(dedupedRows);
   console.log('Done.');
 }
 
