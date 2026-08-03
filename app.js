@@ -138,9 +138,12 @@ function setStatLabels(mode) {
     labels.newbuild.textContent = 'New build share';
     labels.latest.textContent = 'Latest sale recorded';
   }
-  // Only the address view ever hides this tile, and only when there's a
-  // single sale (see applyResultSet); every other mode always shows it.
+  // The address view shows only Sales recorded + Latest sale price: the price
+  // range and latest-sale date are already in the sale-history table below
+  // the tiles, so repeating them up top is noise. Every other mode shows all
+  // four tiles.
   document.getElementById('stat-newbuild-tile').hidden = mode === 'address';
+  document.getElementById('stat-latest-tile').hidden = mode === 'address';
 }
 
 const palette = {
@@ -894,13 +897,10 @@ function applyResultSet(data, cap, trueTotal) {
         : '—',
   );
   setStat('stat-latest', latest ? latest.sale_date : '—');
-  // A single sale has no spread worth showing; the "Latest sale price" tile
-  // already carries it.
-  document.getElementById('stat-newbuild-tile').hidden = data.length < 2;
 
   const capNote = document.getElementById('charts-cap-note');
   if (trueTotal && trueTotal > cap) {
-    capNote.textContent = `Median, price range and charts below reflect only the ${cap.toLocaleString()} shown sales, not all ${trueTotal.toLocaleString()}.`;
+    capNote.textContent = `Stats and charts below reflect only the ${cap.toLocaleString()} shown sales, not all ${trueTotal.toLocaleString()}.`;
     capNote.hidden = false;
   } else {
     capNote.hidden = true;
