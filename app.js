@@ -812,7 +812,16 @@ async function loadDefaultView() {
   const { summary, quarterly, district, type, recent } = defaultViewCache;
   setStatLabels('aggregate');
   if (summary) {
-    setStat('stat-total', summary.total_sales.toLocaleString());
+    // The all-time total ("since 2010") is contextless next to a live
+    // dashboard, so the first tile shows sales over the trailing 12 months
+    // (the last four quarters) instead — a figure that means something now.
+    // Fall back to the lifetime total only if the quarterly series is empty.
+    const trailingYear = quarterly
+      .slice(-4)
+      .reduce((acc, q) => acc + (q.sale_count || 0), 0);
+    document.getElementById('stat-total-label').textContent =
+      trailingYear > 0 ? 'Sales past 12 months' : 'Sales since 2010';
+    setStat('stat-total', (trailingYear > 0 ? trailingYear : summary.total_sales).toLocaleString());
     setStat('stat-median', eur.format(summary.median_price));
     setStat('stat-newbuild', `${newBuildShareFromCounts(type)}%`);
     setStat('stat-latest', summary.latest_sale_date);
