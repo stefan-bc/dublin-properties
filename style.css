@@ -154,20 +154,25 @@ a {
   position: absolute;
   right: 34px;
   top: 50%;
-  transform: translateY(-50%);
-  font-size: 11px;
-  color: var(--text-muted);
+  width: 14px;
+  height: 14px;
+  margin-top: -7px;
   pointer-events: none;
-  animation: search-status-pulse 1.1s ease-in-out infinite;
 }
 
-@keyframes search-status-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
+.search-status-spinner {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--scale-high);
+  border-radius: 50%;
+  animation: search-status-spin 0.7s linear infinite;
+}
+
+@keyframes search-status-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 

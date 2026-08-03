@@ -33,7 +33,7 @@
           aria-autocomplete="list"
         />
         <button id="search-clear" class="search-clear" type="button" aria-label="Clear search" hidden>&times;</button>
-        <span id="search-status" class="search-status" hidden aria-live="polite">Searching…</span>
+        <span id="search-status" class="search-status" hidden role="status" aria-label="Loading"><span class="search-status-spinner" aria-hidden="true"></span></span>
         <ul id="suggestions" class="suggestions" role="listbox" hidden></ul>
       </div>
       <select id="filter-district" class="filter-select" aria-label="Filter by postal district">
