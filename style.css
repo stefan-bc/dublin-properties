@@ -89,6 +89,17 @@ a {
   max-width: 70ch;
 }
 
+.report-link {
+  color: var(--series-1);
+  text-decoration: none;
+  white-space: nowrap;
+  margin-left: 10px;
+}
+
+.report-link:hover {
+  text-decoration: underline;
+}
+
 #refresh-countdown {
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
