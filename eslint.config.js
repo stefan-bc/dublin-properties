@@ -33,7 +33,7 @@ export default [
     rules: { 'no-unused-vars': 'off' },
   },
   {
-    files: ['scripts/**/*.mjs', 'tests/**/*.mjs'],
+    files: ['scripts/**/*.mjs', 'tests/**/*.mjs', 'analysis/**/*.mjs'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',

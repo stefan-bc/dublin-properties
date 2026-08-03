@@ -1,4 +1,4 @@
-import { escapeForFilter, escapeForEircodeFilter, shortSize } from './lib.js';
+import { shortSize } from './lib.js';
 
 // Plain fetch against PostgREST instead of @supabase/supabase-js — this
 // dashboard only ever runs simple SELECTs with the public anon key. The SDK
@@ -583,45 +583,6 @@ function median(values) {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
-function aggregateFromRows(rows) {
-  const byQuarter = new Map();
-  const byDistrict = new Map();
-  const byType = new Map();
-
-  for (const r of rows) {
-    const q = quarterFmt(r.sale_date);
-    if (!byQuarter.has(q)) byQuarter.set(q, []);
-    byQuarter.get(q).push(r.price);
-
-    if (r.postal_district) {
-      if (!byDistrict.has(r.postal_district)) byDistrict.set(r.postal_district, []);
-      byDistrict.get(r.postal_district).push(r.price);
-    }
-
-    if (r.property_type) {
-      const label = propertyTypeLabel(r.property_type);
-      if (!byType.has(label)) byType.set(label, []);
-      byType.get(label).push(r.price);
-    }
-  }
-
-  return {
-    quarterly: [...byQuarter.entries()].map(([quarter, prices]) => ({
-      quarter,
-      median_price: median(prices),
-    })),
-    district: [...byDistrict.entries()].map(([postal_district, prices]) => ({
-      postal_district,
-      median_price: median(prices),
-      sale_count: prices.length, // renderMap's tooltip/Co. Dublin note need this; renderDistrict ignores it
-    })),
-    type: [...byType.entries()].map(([property_type, prices]) => ({
-      property_type,
-      median_price: median(prices),
-    })),
-  };
-}
-
 function renderNotesCell(r) {
   const td = document.createElement('td');
   td.className = 'notes-cell';
@@ -783,17 +744,17 @@ function populateFilterSelects() {
   typeSelect.value = currentType;
 }
 
-// Stats + table are shared by every result-set view; chart handling differs
-// (aggregate charts for a filtered list, a dedicated price-history chart for
-// a single address — see setChartsMode), so it's kept separate.
+// Stats + table for the address-history view (a single address is a bounded,
+// exact-equality result set, so everything derives from the rows themselves).
 //
 // trueTotal is the real count of matching rows (see pg()'s exactCount), which
 // can be far larger than `data` when the result set is capped at `cap`.
 // "Total sales" uses it directly since that's cheap and exact; median/new
-// build share/charts are still derived from just the capped `data` (a true
-// aggregate over an arbitrary filter would need a database round trip per
-// stat, or a bespoke RPC) — capped-note() below says so rather than quietly
-// presenting a 200-row sample as if it were the full picture.
+// build share/charts are still derived from just the capped `data` — capped-
+// note() below says so rather than quietly presenting a 200-row sample as if
+// it were the full picture. The filtered search path does NOT go through
+// here: it uses sales_stats, which computes everything server-side over all
+// matches (see runFilteredView).
 function applyResultSet(data, cap, trueTotal) {
   renderTable(data, cap, trueTotal);
   document.getElementById('address-detail').hidden = true; // re-shown by renderAddressDetail when relevant
@@ -811,21 +772,30 @@ function applyResultSet(data, cap, trueTotal) {
   }
 }
 
-function applyAggregateCharts(data) {
-  setChartsMode('aggregate');
-  const agg = aggregateFromRows(data);
-  renderQuarterly(agg.quarterly.sort((a, b) => a.quarter.localeCompare(b.quarter)));
-  renderDistrict(agg.district);
-  renderMap(agg.district);
-  renderType(agg.type);
-}
-
 function buildFilterHeading(term, district, type) {
   const parts = [];
   if (term) parts.push(`"${term}"`);
   if (district) parts.push(district);
   if (type) parts.push(type); // already a merged label ("New Build" / "Resale")
   return parts.length ? `Filtered sales — ${parts.join(' · ')}` : 'Recent sales';
+}
+
+// Renders a filtered view's stats + charts from a sales_stats RPC result
+// (see supabase/schema.sql): server-computed medians and series that cover
+// every matching sale, not just the 200-row page. `rows` in the payload is
+// the capped page for the table; `total` is the true match count.
+function applyStatsPayload(agg) {
+  document.getElementById('address-detail').hidden = true;
+  document.getElementById('charts-cap-note').hidden = true; // stats/charts cover all matches, not the page
+  setStat('stat-total', agg.total.toLocaleString());
+  setStat('stat-median', eur.format(agg.median_price));
+  setStat('stat-newbuild', `${newBuildShareFromCounts(agg.types)}%`);
+  setStat('stat-latest', agg.latest_sale_date || '—');
+  setChartsMode('aggregate');
+  renderQuarterly(agg.quarterly);
+  renderDistrict(agg.districts);
+  renderMap(agg.districts);
+  renderType(mergeTypeRows(agg.types));
 }
 
 // The single query path behind search text, the district select, the
@@ -847,28 +817,19 @@ async function runFilteredView() {
 
   setViewLoading(true);
 
-  const params = {
-    select: 'sale_date,address,postal_district,eircode,property_type,price,size_description,vat_exclusive,not_full_market_price',
-    order: 'sale_date.desc',
-    limit: RESULT_LIMIT,
-  };
-
-  if (term) {
-    const safe = escapeForFilter(term);
-    const safeEircode = escapeForEircodeFilter(term);
-    params.or = `(address.ilike."%${safe}%",eircode.ilike."%${safeEircode}%",postal_district.ilike."%${safe}%")`;
-  }
-  if (district) params.postal_district = `eq.${district}`;
-  if (type) {
-    // "type" is a merged label ("New Build"); match every raw source string
-    // that folds into it (see PROPERTY_TYPE_LABELS), including the Irish-
-    // language variants, not just the common English one.
-    const group = typeOptions.find((t) => t.label === type);
-    if (group) params.property_type = `in.(${group.values.map((v) => `"${v.replace(/"/g, '\\"')}"`).join(',')})`;
-  }
-  if (!includeNonMarket) params.not_full_market_price = 'eq.false';
-
-  const { data, error, count } = await pg('sales', params, { exactCount: true });
+  // The filter goes to sales_stats as bound parameters — the SQL owns the
+  // matching, medians and series (see supabase/schema.sql) — and the whole
+  // view renders from that one payload, so nothing here can disagree with
+  // the table. "type" is a merged label ("New Build"); expand it to every
+  // raw source string that folds into it (see PROPERTY_TYPE_LABELS),
+  // including the Irish-language variants, and pass them '|'-joined.
+  const typeGroup = type ? typeOptions.find((t) => t.label === type) : null;
+  const { data, error } = await pg('rpc/sales_stats', {
+    p_term: term || null,
+    p_district: district || null,
+    p_types: typeGroup ? typeGroup.values.join('|') : null,
+    p_include_non_market: includeNonMarket,
+  });
   if (requestId !== viewRequestId) return; // superseded by a newer view request
   if (error) {
     console.error(error);
@@ -876,9 +837,15 @@ async function runFilteredView() {
     return;
   }
 
+  const agg = data[0];
+  if (!agg) {
+    setViewLoading(false);
+    return;
+  }
+
   document.getElementById('table-heading').textContent = buildFilterHeading(term, district, type);
-  applyResultSet(data, RESULT_LIMIT, count);
-  applyAggregateCharts(data);
+  renderTable(agg.rows, RESULT_LIMIT, agg.total);
+  applyStatsPayload(agg);
   setViewLoading(false);
 }
 

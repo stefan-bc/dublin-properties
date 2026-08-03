@@ -117,3 +117,85 @@ as $$
 $$;
 
 grant execute on function search_sales(text, integer) to anon, authenticated;
+
+-- True server-side aggregates for a filtered view. The dashboard used to pull
+-- a capped 200-row page of matching sales into the browser and compute median/
+-- charts from that sample (honest about it, but still approximate — a filter
+-- matching 5,000 sales only summarised the 200 newest). This function runs
+-- the exact same filters as the table below it and returns the stats, the
+-- quarterly/district/type series, AND the capped table rows in one round
+-- trip, so every number on screen covers every matching sale. The filter
+-- logic lives here in SQL once, rather than being rebuilt in JS per control,
+-- so the table and charts cannot drift. Filters are null when inactive;
+-- p_types is a '|'-joined list of raw property_type values (the JS side
+-- expands a merged label like "New Build" into every raw source string,
+-- including the Irish-language variants). p_term matches address/Eircode/
+-- district as ilike substrings — the term is a bound parameter and %/_/\ are
+-- escaped as literals, so it can't widen its own match. Runs as the invoker,
+-- so RLS's public read policy applies. Called by app.js runFilteredView.
+create or replace function sales_stats(
+  p_term text default null,
+  p_district text default null,
+  p_types text default null,
+  p_include_non_market boolean default false
+)
+returns table (
+  total bigint,
+  median_price double precision,
+  latest_sale_date date,
+  quarterly json,
+  districts json,
+  types json,
+  rows json
+)
+language sql
+stable
+as $$
+  with t as (
+    select coalesce(p_term, '') as raw,
+           replace(replace(replace(coalesce(p_term, ''), '\', '\\'), '%', '\%'), '_', '\_') as esc
+  ),
+  matches as (
+    select address, postal_district, eircode, property_type, price, sale_date,
+           size_description, vat_exclusive, not_full_market_price
+    from sales s, t
+    where (
+        t.raw = ''
+        or s.address ilike '%' || t.esc || '%' escape '\'
+        or s.eircode ilike '%' || replace(t.esc, ' ', '') || '%' escape '\'
+        or s.postal_district ilike '%' || t.esc || '%' escape '\'
+      )
+      and (p_district is null or p_district = '' or s.postal_district = p_district)
+      and (p_types is null or p_types = '' or s.property_type = any(string_to_array(p_types, '|')))
+      and (p_include_non_market or not s.not_full_market_price)
+  )
+  select
+    (select count(*) from matches),
+    (select percentile_cont(0.5) within group (order by price)::float8 from matches),
+    (select max(sale_date) from matches),
+    (select coalesce(json_agg(q), '[]') from (
+       select date_trunc('quarter', sale_date)::date as quarter,
+              percentile_cont(0.5) within group (order by price)::float8 as median_price,
+              count(*) as sale_count
+       from matches group by 1 order by 1
+     ) q),
+    (select coalesce(json_agg(d), '[]') from (
+       select postal_district,
+              percentile_cont(0.5) within group (order by price)::float8 as median_price,
+              count(*) as sale_count
+       from matches where postal_district is not null group by 1 order by 1
+     ) d),
+    (select coalesce(json_agg(v), '[]') from (
+       select property_type,
+              percentile_cont(0.5) within group (order by price)::float8 as median_price,
+              count(*) as sale_count
+       from matches where property_type is not null group by 1 order by 2 desc
+     ) v),
+    (select coalesce(json_agg(r), '[]') from (
+       select sale_date::text, address, postal_district, eircode, property_type,
+              price::float8, size_description, vat_exclusive, not_full_market_price
+       from matches order by sale_date desc limit 200
+     ) r);
+$$;
+
+grant execute on function sales_stats(text, text, text, boolean) to anon, authenticated;

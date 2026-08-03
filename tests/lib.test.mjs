@@ -1,29 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { escapeForFilter, escapeForEircodeFilter, shortSize } from '../lib.js';
-
-test('escapeForFilter leaves commas/periods/parens intact', () => {
-  // Regression test: these used to be stripped, which broke ILIKE matching
-  // for any address containing one (see app.js's or=(...) filter, which now
-  // wraps values in double quotes instead of stripping structural chars).
-  assert.equal(escapeForFilter('Apartment 61, Mercor Manor, Mercer Vale'), 'Apartment 61, Mercor Manor, Mercer Vale');
-  assert.equal(escapeForFilter('Unit 4 (rear)'), 'Unit 4 (rear)');
-  assert.equal(escapeForFilter('St. Anne’s'), 'St. Anne’s');
-});
-
-test('escapeForFilter strips % (would otherwise widen the ILIKE wildcard)', () => {
-  assert.equal(escapeForFilter('50% off'), '50 off');
-});
-
-test('escapeForFilter escapes double quotes and backslashes for the quoted ilike value', () => {
-  assert.equal(escapeForFilter('12" Pipe'), '12\\" Pipe');
-  assert.equal(escapeForFilter('back\\slash'), 'back\\\\slash');
-});
-
-test('escapeForEircodeFilter strips whitespace on top of the base escaping', () => {
-  assert.equal(escapeForEircodeFilter('D03 C640'), 'D03C640');
-  assert.equal(escapeForEircodeFilter('d03c640'), 'd03c640');
-});
+import { shortSize } from '../lib.js';
 
 test('shortSize parses the PPR range sentence', () => {
   assert.equal(

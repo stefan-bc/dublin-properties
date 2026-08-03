@@ -30,10 +30,15 @@ PPR CSV (weekly)  →  GitHub Action (scripts/ingest.mjs)  →  Supabase Postgre
   plus on-demand via `workflow_dispatch`. The dashboard shows a live countdown
   to the next run.
 - **Database**: `supabase/schema.sql` — one `sales` table (RLS: public
-  read-only, writes only via the service-role key) plus four aggregate views
+  read-only, writes only via the service-role key), four aggregate views
   (`sales_summary`, `sales_quarterly`, `sales_by_district`, `sales_by_type`)
   so the dashboard's default charts don't have to pull ~250k rows into the
-  browser just to compute a median.
+  browser just to compute a median, plus two RPC functions. `search_sales`
+  runs a pg_trgm word-similarity search for the type-ahead box. `sales_stats`
+  computes the whole filtered view (total, median, latest sale, quarterly,
+  district, type, and rows) in one Postgres round trip — importantly, the
+  total, median, and chart series are computed over *all* matching rows, not
+  the 200-row result cap, so the filtered view is honest at scale.
 - **Dashboard**: `index.html` / `style.css` / `app.js` — no build step, no
   framework, no SDK. Queries Supabase's PostgREST API directly via plain
   `fetch()` with the public anon key (safe — reads only, enforced by RLS);
@@ -57,6 +62,13 @@ PPR CSV (weekly)  →  GitHub Action (scripts/ingest.mjs)  →  Supabase Postgre
   address is always one district and one property type, so those two charts
   are hidden there rather than shown as a meaningless one-bar chart; the
   quarterly chart becomes that address's own raw price history instead.
+- **Analysis layer**: `analysis/generate-report.mjs` pulls the live data and
+  produces `analysis/data.json` plus the charts in `analysis/charts/*.svg`,
+  all derived from the same PostgREST API the dashboard uses. It computes the
+  year-on-year median series, district resale growth 2010→2025 (with
+  sample-size floors), and the new-build-vs-resale premium, then a
+  hand-written report (`analysis/dublin-housing-report.md`) is generated on
+  top of those numbers. Re-run with `node analysis/generate-report.mjs`.
 - **Postal district choropleth**: `dublin-districts.js` holds real Eircode
   routing-key boundaries for the 22 core Dublin districts (`D01`–`D24`,
   `D6W`), sourced from
@@ -104,10 +116,10 @@ No build step. Serve the directory and open it:
 npx serve .
 ```
 
-`escapeForFilter`/`escapeForEircodeFilter`/`shortSize` (dashboard) and
-`parseDate`/`parsePrice`/`derivePostalDistrict` (ingest) are split out into
-`lib.js`/`scripts/lib.mjs` so they're importable from a plain Node test —
-`app.js` itself touches the DOM at load time and can't run outside a browser.
+`shortSize` (dashboard) and `parseDate`/`parsePrice`/`derivePostalDistrict`
+(ingest) are split out into `lib.js`/`scripts/lib.mjs` so they're importable
+from a plain Node test — `app.js` itself touches the DOM at load time and
+can't run outside a browser.
 
 ```
 npm test     # node --test, tests/
@@ -151,3 +163,5 @@ CI (`.github/workflows/ci.yml`) runs both on every push/PR.
 - [x] First ingest run — 249,311 Dublin rows loaded, verified end-to-end in a real browser
 - [x] Deployed to Cloudflare Pages — live at `dublin-properties.pages.dev`, connected to this repo, auto-deploys on push to `main`
 - [ ] Custom domain `dublin.ectoplasma.org` attached (zone already exists in the same Cloudflare account, not yet wired up)
+- [x] Filtered view now computed server-side over all matching rows (`sales_stats` RPC) — code committed; live DB needs one re-run of `supabase/schema.sql` (also applies the `search_sales` fix)
+- [x] Analysis layer: `analysis/generate-report.mjs`, `data.json`, charts, and `analysis/dublin-housing-report.md`
