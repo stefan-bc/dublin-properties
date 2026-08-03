@@ -154,20 +154,27 @@ a {
   position: absolute;
   right: 34px;
   top: 50%;
-  width: 14px;
-  height: 14px;
-  margin-top: -7px;
+  width: 16px;
+  height: 16px;
+  margin-top: -8px;
   pointer-events: none;
 }
 
 .search-status-spinner {
   display: block;
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--border);
-  border-top-color: var(--scale-high);
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  animation: search-status-spin 0.7s linear infinite;
+  /* A ring with a bright arc sweeping around, iOS-style — the arc is the
+     "charging" sweep; the conic keeps thickness uniform and rotation smooth
+     where the old border-triangle looked janky. */
+  background: conic-gradient(
+    var(--scale-high) 0deg 270deg,
+    rgba(255, 255, 255, 0.14) 270deg 360deg
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+  animation: search-status-spin 0.8s linear infinite;
 }
 
 @keyframes search-status-spin {
