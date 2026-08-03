@@ -77,9 +77,8 @@ PPR CSV (weekly)  →  GitHub Action (scripts/ingest.mjs)  →  Supabase Postgre
   sample-size floors), the new-build-vs-resale premium, per-year price
   percentiles (P10–P90, fetched as point queries via the HTTP `Range` header
   rather than a full-table scan), an approximate price-per-square-metre from
-  PPR's floor-area bands, and calendar-month volume seasonality, then a
-  hand-written report (`analysis/dublin-housing-report.md`) is generated on
-  top of those numbers. Re-run with `node analysis/generate-report.mjs`.
+  PPR's floor-area bands, and calendar-month volume seasonality. Re-run with
+  `node analysis/generate-report.mjs`.
 - **Postal district choropleth**: `dublin-districts.js` holds real Eircode
   routing-key boundaries for the 22 core Dublin districts (`D01`–`D24`,
   `D6W`), sourced from
@@ -179,4 +178,4 @@ CI (`.github/workflows/ci.yml`) runs both on every push/PR.
 - [ ] Custom domain `dublin.ectoplasma.org` attached (zone already exists in the same Cloudflare account, not yet wired up)
 - [x] Filtered view now computed server-side over all matching rows (`sales_stats` RPC)
 - [x] `search_sales` rewritten to use the trigram GIN index (dynamic SQL); district terms answered client-side
-- [x] Analysis layer: `analysis/generate-report.mjs`, `data.json`, charts, and `analysis/dublin-housing-report.md`
+- [x] Analysis layer: `analysis/generate-report.mjs` + `data.json` + charts

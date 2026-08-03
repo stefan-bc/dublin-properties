@@ -110,11 +110,34 @@ function newBuildShareFromCounts(typeRows) {
   return total ? Math.round((newCount / total) * 100) : 0;
 }
 
-// Same stat, from a raw list of sale rows (the filtered/address-history path).
-function newBuildShareFromRows(rows) {
-  if (!rows.length) return 0;
-  const newCount = rows.filter((r) => propertyTypeLabel(r.property_type) === 'New Build').length;
-  return Math.round((newCount / rows.length) * 100);
+// The four stat tiles mean different things depending on the view, so their
+// labels are set with the values. Overview: the whole register since 2010.
+// Filtered: whatever matches the active search/filters. Address: that single
+// property's own record — where "New build share" is meaningless (a house is
+// either new-built once or not) and "Price range" says what actually matters.
+function setStatLabels(mode) {
+  const labels = {
+    total: document.getElementById('stat-total-label'),
+    median: document.getElementById('stat-median-label'),
+    newbuild: document.getElementById('stat-newbuild-label'),
+    latest: document.getElementById('stat-latest-label'),
+  };
+  if (mode === 'address') {
+    labels.total.textContent = 'Sales recorded';
+    labels.median.textContent = 'Median price';
+    labels.newbuild.textContent = 'Price range';
+    labels.latest.textContent = 'Latest sale recorded';
+  } else if (mode === 'filtered') {
+    labels.total.textContent = 'Matches';
+    labels.median.textContent = 'Median price';
+    labels.newbuild.textContent = 'New build share';
+    labels.latest.textContent = 'Latest sale recorded';
+  } else {
+    labels.total.textContent = 'Sales since 2010';
+    labels.median.textContent = 'Median price';
+    labels.newbuild.textContent = 'New build share';
+    labels.latest.textContent = 'Latest sale recorded';
+  }
 }
 
 const palette = {
@@ -173,6 +196,19 @@ let suggestAbort = null;
 // on the weekly ingest, and clearing a search (or clicking the title) calls
 // loadDefaultView again, so re-fetching five views each time is pure waste.
 let defaultViewCache = null;
+// Address shown by the current address-history view, if any — it shapes the
+// URL (and thus Back/Forward), see viewToUrl().
+let viewAddress = null;
+// History wiring. The page is a single-URL SPA, so Back/Forward would bounce
+// straight out of the site; instead each view (default / filtered / address)
+// writes its state to the URL via pushState and restores it on popstate.
+// `allowHistoryPush` turns the first URL write of a navigation gesture into a
+// pushState (so Back returns to the previous view) and collapses every
+// subsequent keystroke into replaceState (so typing doesn't stack a history
+// entry per character). `restoringView` suppresses URL writes entirely while
+// a popstate restore is in flight — the URL already points where we're going.
+let allowHistoryPush = false;
+let restoringView = 0;
 
 function districtSynonyms(label) {
   const syns = [label.toLowerCase()];
@@ -379,6 +415,20 @@ function hideMapTooltip() {
   mapTooltipEl.hidden = true;
 }
 
+// Clicking a map district (or the "Co. Dublin" note) is an explicit "show me
+// this district" — clear any lingering search text first. Otherwise a term
+// left in the box from a previous search (or an opened address) gets AND-ed
+// with the district, matches almost nothing, and every click reads as "0
+// results" with the map blanked out.
+function districtFilterActivate(label) {
+  allowHistoryPush = true;
+  searchInput.value = '';
+  toggleClearButton();
+  hideSuggestions();
+  districtSelect.value = label;
+  runFilteredView();
+}
+
 // Colours, draws, and wires up the choropleth. `rows` is the same
 // {postal_district, median_price, sale_count} shape renderDistrict gets —
 // whatever's driving the bar chart also drives the map, so they can never
@@ -413,8 +463,7 @@ function renderMap(rows) {
     btn.textContent = 'Co. Dublin';
     btn.title = 'Filter by Co. Dublin';
     btn.addEventListener('click', () => {
-      districtSelect.value = 'Co. Dublin';
-      runFilteredView();
+      districtFilterActivate('Co. Dublin');
     });
     note.appendChild(btn);
     note.append(' fall outside the 22 mapped districts and aren’t shown geographically.');
@@ -458,8 +507,7 @@ function renderMap(rows) {
     path.addEventListener('blur', hideMapTooltip);
 
     const activate = () => {
-      districtSelect.value = label;
-      runFilteredView();
+      districtFilterActivate(label);
     };
     path.addEventListener('click', activate);
     path.addEventListener('keydown', (e) => {
@@ -708,6 +756,7 @@ async function loadDefaultView() {
   const requestId = ++viewRequestId;
   viewAbort?.abort();
   viewAbort = new AbortController();
+  viewAddress = null;
   document.getElementById('table-heading').textContent = 'Recent sales';
   document.getElementById('result-note').textContent = '';
   document.getElementById('address-detail').hidden = true;
@@ -739,6 +788,7 @@ async function loadDefaultView() {
   }
 
   const { summary, quarterly, district, type, recent } = defaultViewCache;
+  setStatLabels('aggregate');
   if (summary) {
     setStat('stat-total', summary.total_sales.toLocaleString());
     setStat('stat-median', eur.format(summary.median_price));
@@ -763,6 +813,7 @@ async function loadDefaultView() {
 
   document.getElementById('stats').classList.remove('is-loading');
   setViewLoading(false);
+  syncUrl(allowHistoryPush);
 }
 
 function populateFilterSelects() {
@@ -793,16 +844,27 @@ function populateFilterSelects() {
 // here: it uses sales_stats, which computes everything server-side over all
 // matches (see runFilteredView).
 function applyResultSet(data, cap, trueTotal) {
+  setStatLabels('address');
   renderTable(data, cap, trueTotal);
   document.getElementById('address-detail').hidden = true; // re-shown by renderAddressDetail when relevant
   setStat('stat-total', (trueTotal ?? data.length).toLocaleString());
   setStat('stat-median', eur.format(median(data.map((r) => r.price))));
-  setStat('stat-newbuild', `${newBuildShareFromRows(data)}%`);
+  const prices = data.map((r) => r.price).filter(Boolean);
+  const minPrice = prices.length ? Math.min(...prices) : null;
+  const maxPrice = prices.length ? Math.max(...prices) : null;
+  setStat(
+    'stat-newbuild',
+    prices.length > 1
+      ? `${eur.format(minPrice)} – ${eur.format(maxPrice)}`
+      : prices.length === 1
+        ? eur.format(minPrice)
+        : '—',
+  );
   setStat('stat-latest', data.length ? data[0].sale_date : '—');
 
   const capNote = document.getElementById('charts-cap-note');
   if (trueTotal && trueTotal > cap) {
-    capNote.textContent = `Median, new build share and charts below reflect only the ${cap.toLocaleString()} shown sales, not all ${trueTotal.toLocaleString()}.`;
+    capNote.textContent = `Median, price range and charts below reflect only the ${cap.toLocaleString()} shown sales, not all ${trueTotal.toLocaleString()}.`;
     capNote.hidden = false;
   } else {
     capNote.hidden = true;
@@ -822,6 +884,7 @@ function buildFilterHeading(term, district, type) {
 // every matching sale, not just the 200-row page. `rows` in the payload is
 // the capped page for the table; `total` is the true match count.
 function applyStatsPayload(agg) {
+  setStatLabels('filtered');
   document.getElementById('address-detail').hidden = true;
   document.getElementById('charts-cap-note').hidden = true; // stats/charts cover all matches, not the page
   setStat('stat-total', agg.total.toLocaleString());
@@ -844,6 +907,7 @@ async function runFilteredView() {
   const requestId = ++viewRequestId;
   viewAbort?.abort();
   viewAbort = new AbortController();
+  viewAddress = null;
   const term = searchInput.value.trim();
   const district = districtSelect.value;
   const type = typeSelect.value;
@@ -887,6 +951,7 @@ async function runFilteredView() {
   renderTable(agg.rows, RESULT_LIMIT, agg.total);
   applyStatsPayload(agg);
   setViewLoading(false); // clears the initial-load dim if this search overtook it
+  syncUrl(allowHistoryPush);
 }
 
 async function runAddressHistory(address) {
@@ -894,6 +959,8 @@ async function runAddressHistory(address) {
   viewAbort?.abort();
   viewAbort = new AbortController();
   debouncedFilteredView.cancel(); // an in-flight debounced search must not fire later and kick us back out
+  allowHistoryPush = true; // opening an address is a discrete navigation
+  viewAddress = address;
   hideSuggestions();
   searchInput.value = address;
   toggleClearButton();
@@ -918,6 +985,7 @@ async function runAddressHistory(address) {
   setChartsMode('address', data);
   renderAddressDetail(data);
   setViewLoading(false); // clears the initial-load dim if this request overtook it
+  syncUrl(allowHistoryPush);
 }
 
 function debounce(fn, ms) {
@@ -928,6 +996,114 @@ function debounce(fn, ms) {
   };
   debounced.cancel = () => clearTimeout(t);
   return debounced;
+}
+
+// --- Browser navigation ---
+// The whole dashboard is one URL, so without this Back/Forward would leave the
+// site. Each view's state is serialised into the query string and restored on
+// popstate, making the views navigable like separate pages (and shareable via
+// the URL). See allowHistoryPush/restoringView above for the push-vs-replace
+// and restore-suppression rules.
+
+function viewToUrl() {
+  const params = new URLSearchParams();
+  if (viewAddress) {
+    params.set('address', viewAddress);
+  } else {
+    const term = searchInput.value.trim();
+    if (term) params.set('q', term);
+    if (districtSelect.value) params.set('district', districtSelect.value);
+    if (typeSelect.value) params.set('type', typeSelect.value);
+    if (nonMarketCheckbox.checked) params.set('nonmarket', '1');
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : './';
+}
+
+function parseViewFromLocation() {
+  const params = new URLSearchParams(location.search);
+  const address = params.get('address');
+  if (address) return { type: 'address', address };
+  const term = params.get('q') ?? '';
+  const district = params.get('district') ?? '';
+  const typeLabel = params.get('type') ?? '';
+  const nonmarket = params.get('nonmarket') === '1';
+  if (term || district || typeLabel || nonmarket) {
+    return { type: 'filtered', term, district, typeLabel, nonmarket };
+  }
+  return { type: 'default' };
+}
+
+function syncUrl(push) {
+  if (restoringView) return; // the URL already says where we're going
+  const url = viewToUrl();
+  if (push) {
+    history.pushState(null, '', url);
+    allowHistoryPush = false;
+  } else {
+    history.replaceState(null, '', url);
+  }
+}
+
+function resetControls() {
+  searchInput.value = '';
+  districtSelect.value = '';
+  typeSelect.value = '';
+  nonMarketCheckbox.checked = false;
+  toggleClearButton();
+  hideSuggestions();
+}
+
+function applyFilteredControls(view) {
+  searchInput.value = view.term;
+  districtSelect.value = view.district;
+  typeSelect.value = view.typeLabel;
+  nonMarketCheckbox.checked = view.nonmarket;
+  toggleClearButton();
+  hideSuggestions();
+}
+
+// Restores whatever view the URL points to (Back/Forward, or the initial load
+// of a deep link). The awaited loader does the fetching; restoringView stays
+// non-zero until it finishes so it can't rewrite the URL we just arrived at.
+window.addEventListener('popstate', async () => {
+  const view = parseViewFromLocation();
+  restoringView++;
+  try {
+    if (view.type === 'address') {
+      await runAddressHistory(view.address);
+    } else if (view.type === 'filtered') {
+      applyFilteredControls(view);
+      await runFilteredView();
+    } else {
+      resetControls();
+      await loadDefaultView();
+    }
+  } finally {
+    restoringView--;
+    allowHistoryPush = true; // the next gesture starts a fresh history entry
+  }
+});
+
+async function loadInitialView() {
+  // Treat the first load like a restore: the URL already points at the right
+  // view, so suppress URL writes (and don't stack a duplicate history entry
+  // for a deep link).
+  restoringView++;
+  try {
+    const view = parseViewFromLocation();
+    if (view.type === 'address') {
+      await runAddressHistory(view.address);
+    } else if (view.type === 'filtered') {
+      applyFilteredControls(view);
+      await runFilteredView();
+    } else {
+      await loadDefaultView();
+    }
+  } finally {
+    restoringView--;
+  }
+  allowHistoryPush = true; // first user navigation pushes a new entry
 }
 
 const searchInput = document.getElementById('search');
@@ -1059,6 +1235,7 @@ function renderSuggestions(term) {
 function selectSuggestion(item) {
   hideSuggestions();
   if (item.type === 'district') {
+    allowHistoryPush = true;
     searchInput.value = '';
     toggleClearButton();
     districtSelect.value = item.value;
@@ -1112,16 +1289,12 @@ searchInput.addEventListener('keydown', (e) => {
   void options;
 });
 
-searchInput.addEventListener('focus', () => {
-  const term = searchInput.value.trim();
-  if (term) renderSuggestions(term);
-});
-
 searchInput.addEventListener('blur', () => {
   setTimeout(hideSuggestions, 100);
 });
 
 clearButton.addEventListener('click', () => {
+  allowHistoryPush = true;
   searchInput.value = '';
   toggleClearButton();
   hideSuggestions();
@@ -1129,18 +1302,23 @@ clearButton.addEventListener('click', () => {
   searchInput.focus();
 });
 
-districtSelect.addEventListener('change', runFilteredView);
-typeSelect.addEventListener('change', runFilteredView);
-nonMarketCheckbox.addEventListener('change', runFilteredView);
+districtSelect.addEventListener('change', () => {
+  allowHistoryPush = true;
+  runFilteredView();
+});
+typeSelect.addEventListener('change', () => {
+  allowHistoryPush = true;
+  runFilteredView();
+});
+nonMarketCheckbox.addEventListener('change', () => {
+  allowHistoryPush = true;
+  runFilteredView();
+});
 
 function goHome() {
   debouncedFilteredView.cancel();
-  searchInput.value = '';
-  districtSelect.value = '';
-  typeSelect.value = '';
-  nonMarketCheckbox.checked = false;
-  toggleClearButton();
-  hideSuggestions();
+  allowHistoryPush = true; // "home" is a view too — Back from it returns to where you were
+  resetControls();
   loadDefaultView();
 }
 
@@ -1176,4 +1354,4 @@ function updateCountdown() {
 updateCountdown();
 setInterval(updateCountdown, 1000);
 
-loadDefaultView();
+loadInitialView();

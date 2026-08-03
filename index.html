@@ -17,7 +17,6 @@
         Every registered residential sale in Dublin since 2010, sourced from the
         <a href="https://www.propertypriceregister.ie" target="_blank" rel="noopener">PSRA Residential Property Price Register</a>.
         Refreshed weekly — next refresh in <span id="refresh-countdown">—</span>.
-        <a class="report-link" href="https://github.com/stefan-bc/dublin-properties/blob/main/analysis/dublin-housing-report.md" target="_blank" rel="noopener">Dublin housing report ↗</a>
       </p>
     </header>
 
@@ -51,19 +50,19 @@
 
     <section class="stats is-loading" id="stats" aria-label="Summary statistics">
       <div class="stat-tile">
-        <span class="stat-label">Total sales</span>
+        <span class="stat-label" id="stat-total-label">Sales since 2010</span>
         <span class="stat-value" id="stat-total">—</span>
       </div>
       <div class="stat-tile">
-        <span class="stat-label">Median price</span>
+        <span class="stat-label" id="stat-median-label">Median price</span>
         <span class="stat-value" id="stat-median">—</span>
       </div>
       <div class="stat-tile">
-        <span class="stat-label">New build share</span>
+        <span class="stat-label" id="stat-newbuild-label">New build share</span>
         <span class="stat-value" id="stat-newbuild">—</span>
       </div>
       <div class="stat-tile">
-        <span class="stat-label">Latest sale recorded</span>
+        <span class="stat-label" id="stat-latest-label">Latest sale recorded</span>
         <span class="stat-value" id="stat-latest">—</span>
       </div>
     </section>
