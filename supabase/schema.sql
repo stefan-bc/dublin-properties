@@ -30,6 +30,7 @@ alter table sales enable row level security;
 -- No insert/update/delete policy is defined, so writes are denied by default
 -- for anon/authenticated; the ingest script uses the service_role key, which
 -- bypasses RLS entirely.
+drop policy if exists "public read access" on sales;
 create policy "public read access" on sales
   for select
   using (true);
