@@ -1,6 +1,6 @@
 # Dublin Property Prices
 
-A demo data-analyst project: every registered residential property sale in
+A demo project: every registered residential property sale in
 Dublin since 2010, ingested weekly from Ireland's official
 [PSRA Residential Property Price Register](https://www.propertypriceregister.ie),
 stored in Supabase, and shown on a small dark-themed dashboard with instant
