@@ -33,6 +33,7 @@
           aria-autocomplete="list"
         />
         <button id="search-clear" class="search-clear" type="button" aria-label="Clear search" hidden>&times;</button>
+        <span id="search-status" class="search-status" hidden aria-live="polite">Searching…</span>
         <ul id="suggestions" class="suggestions" role="listbox" hidden></ul>
       </div>
       <select id="filter-district" class="filter-select" aria-label="Filter by postal district">
@@ -57,7 +58,7 @@
         <span class="stat-label" id="stat-median-label">Median price</span>
         <span class="stat-value" id="stat-median">—</span>
       </div>
-      <div class="stat-tile">
+      <div class="stat-tile" id="stat-newbuild-tile">
         <span class="stat-label" id="stat-newbuild-label">New build share</span>
         <span class="stat-value" id="stat-newbuild">—</span>
       </div>

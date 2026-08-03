@@ -124,7 +124,7 @@ function setStatLabels(mode) {
   };
   if (mode === 'address') {
     labels.total.textContent = 'Sales recorded';
-    labels.median.textContent = 'Median price';
+    labels.median.textContent = 'Latest sale price';
     labels.newbuild.textContent = 'Price range';
     labels.latest.textContent = 'Latest sale recorded';
   } else if (mode === 'filtered') {
@@ -138,6 +138,9 @@ function setStatLabels(mode) {
     labels.newbuild.textContent = 'New build share';
     labels.latest.textContent = 'Latest sale recorded';
   }
+  // Only the address view ever hides this tile, and only when there's a
+  // single sale (see applyResultSet); every other mode always shows it.
+  document.getElementById('stat-newbuild-tile').hidden = mode === 'address';
 }
 
 const palette = {
@@ -209,6 +212,9 @@ let viewAddress = null;
 // a popstate restore is in flight — the URL already points where we're going.
 let allowHistoryPush = false;
 let restoringView = 0;
+// "Searching…" state for the search box — a search is pending from the moment
+// a keystroke schedules one until the latest view's results land.
+let searchPending = false;
 
 function districtSynonyms(label) {
   const syns = [label.toLowerCase()];
@@ -649,13 +655,6 @@ function renderAddressDetail(rows) {
   detail.hidden = false;
 }
 
-function median(values) {
-  if (!values.length) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
 function renderNotesCell(r) {
   const td = document.createElement('td');
   td.className = 'notes-cell';
@@ -690,6 +689,15 @@ function setStat(id, text) {
   el.classList.remove('flash');
   void el.offsetWidth; // restart the animation
   el.classList.add('flash');
+}
+
+// Toggles the "Searching…" indicator in the search box. Idempotent — the
+// first keystroke switches it on and the winning request's completion (or an
+// error) switches it off; superseded requests leave it alone.
+function setSearchPending(pending) {
+  if (searchPending === pending) return;
+  searchPending = pending;
+  document.getElementById('search-status').hidden = !pending;
 }
 
 // Dims stats/charts/table while a view is being (re)loaded, so filtering
@@ -813,6 +821,7 @@ async function loadDefaultView() {
 
   document.getElementById('stats').classList.remove('is-loading');
   setViewLoading(false);
+  setSearchPending(false);
   syncUrl(allowHistoryPush);
 }
 
@@ -847,8 +856,9 @@ function applyResultSet(data, cap, trueTotal) {
   setStatLabels('address');
   renderTable(data, cap, trueTotal);
   document.getElementById('address-detail').hidden = true; // re-shown by renderAddressDetail when relevant
+  const latest = data.length ? data[0] : null; // rows come back ordered by sale_date desc
   setStat('stat-total', (trueTotal ?? data.length).toLocaleString());
-  setStat('stat-median', eur.format(median(data.map((r) => r.price))));
+  setStat('stat-median', latest && latest.price != null ? eur.format(latest.price) : '—');
   const prices = data.map((r) => r.price).filter(Boolean);
   const minPrice = prices.length ? Math.min(...prices) : null;
   const maxPrice = prices.length ? Math.max(...prices) : null;
@@ -860,7 +870,10 @@ function applyResultSet(data, cap, trueTotal) {
         ? eur.format(minPrice)
         : '—',
   );
-  setStat('stat-latest', data.length ? data[0].sale_date : '—');
+  setStat('stat-latest', latest ? latest.sale_date : '—');
+  // A single sale has no spread worth showing; the "Latest sale price" tile
+  // already carries it.
+  document.getElementById('stat-newbuild-tile').hidden = data.length < 2;
 
   const capNote = document.getElementById('charts-cap-note');
   if (trueTotal && trueTotal > cap) {
@@ -908,6 +921,7 @@ async function runFilteredView() {
   viewAbort?.abort();
   viewAbort = new AbortController();
   viewAddress = null;
+  setSearchPending(true);
   const term = searchInput.value.trim();
   const district = districtSelect.value;
   const type = typeSelect.value;
@@ -941,16 +955,21 @@ async function runFilteredView() {
   if (requestId !== viewRequestId) return; // superseded by a newer view request
   if (error) {
     console.error(error);
+    setSearchPending(false);
     return;
   }
 
   const agg = data[0];
-  if (!agg) return;
+  if (!agg) {
+    setSearchPending(false);
+    return;
+  }
 
   document.getElementById('table-heading').textContent = buildFilterHeading(term, district, type);
   renderTable(agg.rows, RESULT_LIMIT, agg.total);
   applyStatsPayload(agg);
   setViewLoading(false); // clears the initial-load dim if this search overtook it
+  setSearchPending(false);
   syncUrl(allowHistoryPush);
 }
 
@@ -961,6 +980,7 @@ async function runAddressHistory(address) {
   debouncedFilteredView.cancel(); // an in-flight debounced search must not fire later and kick us back out
   allowHistoryPush = true; // opening an address is a discrete navigation
   viewAddress = address;
+  setSearchPending(true);
   hideSuggestions();
   searchInput.value = address;
   toggleClearButton();
@@ -978,6 +998,7 @@ async function runAddressHistory(address) {
   if (requestId !== viewRequestId) return; // superseded by a newer view request
   if (error) {
     console.error(error);
+    setSearchPending(false);
     return;
   }
   document.getElementById('table-heading').textContent = `Sale history: ${address}`;
@@ -985,6 +1006,7 @@ async function runAddressHistory(address) {
   setChartsMode('address', data);
   renderAddressDetail(data);
   setViewLoading(false); // clears the initial-load dim if this request overtook it
+  setSearchPending(false);
   syncUrl(allowHistoryPush);
 }
 
@@ -1005,21 +1027,12 @@ function debounce(fn, ms) {
 // the URL). See allowHistoryPush/restoringView above for the push-vs-replace
 // and restore-suppression rules.
 
-function viewToUrl() {
-  const params = new URLSearchParams();
-  if (viewAddress) {
-    params.set('address', viewAddress);
-  } else {
-    const term = searchInput.value.trim();
-    if (term) params.set('q', term);
-    if (districtSelect.value) params.set('district', districtSelect.value);
-    if (typeSelect.value) params.set('type', typeSelect.value);
-    if (nonMarketCheckbox.checked) params.set('nonmarket', '1');
-  }
-  const qs = params.toString();
-  return qs ? `?${qs}` : './';
-}
+// The URL is a link only to a destination, not to whatever's half-typed:
+// an address the user picked (`?address=`) or a chosen filter (`?district=`,
+// `?type=`, `?nonmarket=1`). A raw search term is transient typing — it never
+// becomes part of the URL, so the address bar stays clean while you type.
 
+// Accepts (but no longer writes) legacy `?q=` URLs shared before this change.
 function parseViewFromLocation() {
   const params = new URLSearchParams(location.search);
   const address = params.get('address');
@@ -1028,7 +1041,7 @@ function parseViewFromLocation() {
   const district = params.get('district') ?? '';
   const typeLabel = params.get('type') ?? '';
   const nonmarket = params.get('nonmarket') === '1';
-  if (term || district || typeLabel || nonmarket) {
+  if (address || term || district || typeLabel || nonmarket) {
     return { type: 'filtered', term, district, typeLabel, nonmarket };
   }
   return { type: 'default' };
@@ -1036,7 +1049,16 @@ function parseViewFromLocation() {
 
 function syncUrl(push) {
   if (restoringView) return; // the URL already says where we're going
-  const url = viewToUrl();
+  const qs = new URLSearchParams();
+  if (viewAddress) qs.set('address', viewAddress);
+  else {
+    if (districtSelect.value) qs.set('district', districtSelect.value);
+    if (typeSelect.value) qs.set('type', typeSelect.value);
+    if (nonMarketCheckbox.checked) qs.set('nonmarket', '1');
+  }
+  const targetQs = qs.toString();
+  if (targetQs === new URLSearchParams(location.search).toString()) return; // already there — typing never rewrites the bar
+  const url = targetQs ? `?${targetQs}` : './';
   if (push) {
     history.pushState(null, '', url);
     allowHistoryPush = false;
@@ -1262,6 +1284,7 @@ function moveActiveSuggestion(delta) {
 }
 
 searchInput.addEventListener('input', () => {
+  setSearchPending(true); // show "Searching…" during the debounce window too
   toggleClearButton();
   addressMatches = [];
   const term = searchInput.value.trim();
