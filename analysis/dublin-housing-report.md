@@ -21,6 +21,15 @@ register via `analysis/generate-report.mjs`; source numbers in `data.json`.
   already-expensive southside.
 - New builds (17.9% of sales) carried a large premium in central districts but
   sold at or *below* resale values in parts of the outer city.
+- The whole price distribution moved up, not just the middle: the P10 (cheapest
+  10% of sales) rose from **€155,000 (2010) to €310,000 (2026)**, the P90 from
+  **€550,000 to €970,000**. The absolute spread between cheapest and most
+  expensive doubled — but the *ratio* narrowed slightly (P90 was 3.5× P10 in
+  2010, 3.1× in 2026), so the market compressed proportionally even as it
+  stretched in euros.
+- Volume is sharply seasonal: December (27,689 sales since 2010) runs at nearly
+  double the January trough (14,400), an end-of-year completion rush visible
+  every year in the raw register.
 
 ## Market overview
 
@@ -78,13 +87,67 @@ only new supply (the city centre), new stock commands a strong premium; in the
 suburban fringe, new-build pricing competes directly with established homes and
 offers little or no premium.
 
+## The whole distribution moved up, not just the middle
+
+Percentiles of full-market-price sales (all property types), by year:
+
+| Year | P10 | Median | P90 | P90 ÷ P10 |
+|------|-----:|-------:|-----:|--------:|
+| 2010 | €155,000 | €270,000 | €550,000 | 3.5× |
+| 2015 | €136,000 | €267,500 | €625,000 | 4.6× |
+| 2020 | €219,950 | €354,864 | €725,000 | 3.3× |
+| 2025 | €300,000 | €467,500 | €940,000 | 3.1× |
+| 2026 (ytd) | €310,000 | €475,000 | €970,000 | 3.1× |
+
+The cheapest decile roughly *doubled* (€155k → €310k), the most expensive decile
+went up 76% (€550k → €970k). So the cheapest sales grew fastest in percentage
+terms — the bottom caught up, proportionally — while in raw euros the spread
+widened from €395k to €660k. The crash years compressed everything (P10 fell to
+€96,916 in 2013), and recovery has pushed the entire band up since.
+
+## Price per square metre: small units cost far more
+
+PPR published floor-area *bands* (not exact areas) for 18,834 Dublin sales in
+2010–2018, then stopped. Using the band midpoint as a representative area:
+
+| Size band | Sales (2010–18) | Median price | Approx. median €/m² |
+|-----------|----------------:|-------------:|---------------------:|
+| < 38 m² | 958 | €251,101 | €6,608/m² |
+| 38–125 m² | 14,506 | €277,533 | €3,405/m² |
+| ≥ 125 m² | 3,370 | €427,313 | €3,419/m² |
+
+Small units (studios and one-beds, mostly new-build apartments) sold at roughly
+**double the price per square metre** of larger homes — the classic small-unit
+premium, where the building's fixed costs are spread over a smaller footprint.
+Price per square metre is nearly flat between the middle and large bands.
+
+## Seasonality: the December rush
+
+Pooling all years (2010–2026), volume by calendar month:
+
+| Month | Sales | | Month | Sales |
+|-------|------:|-|-------|------:|
+| Jan | 14,400 | | Jul | 21,816 |
+| Feb | 16,814 | | Aug | 19,220 |
+| Mar | 18,556 | | Sep | 20,563 |
+| Apr | 16,973 | | Oct | 22,070 |
+| May | 18,750 | | Nov | 21,059 |
+| Jun | 20,281 | | Dec | **27,689** |
+
+December runs at nearly double the January trough. This is a completion-effect:
+transactions are pushed to close before the year ends, and the register records
+them as they complete, so the tail of the year always looks inflated.
+
 ## Method and caveats
 
 All medians are computed over every matching row server-side (not a sample),
 with non-full-market-price sales (gifts, part-transfers; 10,917 rows) excluded
-from price figures. The register has no floor area, no mortgage/financing
-details, and no condition/quality data, so price-per-square-metre or
-price-by-quality analysis is impossible from this source. 42,668 transactions
+from price figures. The register has no mortgage/financing details and no
+condition/quality data, so price-by-quality analysis is impossible from this
+source. Floor area exists only as coarse bands (`< 38 m²`, `38–125 m²`,
+`≥ 125 m²`) and only for 2010–2018 (18,834 Dublin rows), so the price-per-square-
+metre figures above use the band midpoint as a representative area — approximate
+by construction, and covering only those years. 42,668 transactions
 are recorded as VAT-exclusive; those prices are used as published, so
 comparisons that mix new builds (where VAT-exclusive records are common) and
 resales carry a small systematic bias — the recorded gap between new-build and

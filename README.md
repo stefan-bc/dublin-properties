@@ -74,7 +74,10 @@ PPR CSV (weekly)  →  GitHub Action (scripts/ingest.mjs)  →  Supabase Postgre
   produces `analysis/data.json` plus the charts in `analysis/charts/*.svg`,
   all derived from the same PostgREST API the dashboard uses. It computes the
   year-on-year median series, district resale growth 2010→2025 (with
-  sample-size floors), and the new-build-vs-resale premium, then a
+  sample-size floors), the new-build-vs-resale premium, per-year price
+  percentiles (P10–P90, fetched as point queries via the HTTP `Range` header
+  rather than a full-table scan), an approximate price-per-square-metre from
+  PPR's floor-area bands, and calendar-month volume seasonality, then a
   hand-written report (`analysis/dublin-housing-report.md`) is generated on
   top of those numbers. Re-run with `node analysis/generate-report.mjs`.
 - **Postal district choropleth**: `dublin-districts.js` holds real Eircode
@@ -147,6 +150,9 @@ CI (`.github/workflows/ci.yml`) runs both on every push/PR.
   or shown as "not recorded") rather than silently dropped or guessed at —
   but a single row is not verified ground truth, only the aggregates are
   reliable at scale.
+- Floor area exists only as coarse bands (`< 38 m²`, `38–125 m²`, `≥ 125 m²`)
+  and only for 2010–2018 (~19k of 249k Dublin rows), so price-per-square-metre
+  is only estimable (band midpoint, not exact area) and only for those years.
 - Postal district is derived from the Eircode routing key when present,
   otherwise parsed from the free-text address, validated against the real 20
   districts — anything that doesn't match a real district falls back to
