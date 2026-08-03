@@ -326,6 +326,13 @@ function escapeForFilter(term) {
   return term.replace(/[%,"\\]/g, '');
 }
 
+// Stored Eircodes have no space ("D03C640"); people type them either way
+// ("D03 C640" or "D03C640"), so match against a space-stripped copy of the
+// term on that column only — address/district text still wants real spaces.
+function escapeForEircodeFilter(term) {
+  return escapeForFilter(term).replace(/\s+/g, '');
+}
+
 // Shared by every "here is a filtered set of sales" view: search, a single
 // district, or a single address's history — table, charts, and stat tiles
 // all read from the same rows so the numbers on screen always agree.
@@ -345,10 +352,11 @@ function applyResultSet(data, cap) {
 
 async function runSearch(term, includeNonMarket) {
   const safe = escapeForFilter(term.trim());
+  const safeEircode = escapeForEircodeFilter(term.trim());
   let query = supabaseClient
     .from('sales')
     .select('sale_date,address,postal_district,eircode,property_type,price,not_full_market_price')
-    .or(`address.ilike.%${safe}%,eircode.ilike.%${safe}%,postal_district.ilike.%${safe}%`)
+    .or(`address.ilike.%${safe}%,eircode.ilike.%${safeEircode}%,postal_district.ilike.%${safe}%`)
     .order('sale_date', { ascending: false })
     .limit(RESULT_LIMIT);
 
@@ -449,12 +457,13 @@ function matchDistricts(term) {
 const fetchAddressSuggestions = debounce(async (term) => {
   const requestId = ++suggestionRequestId;
   const safe = escapeForFilter(term.trim());
+  const safeEircode = escapeForEircodeFilter(term.trim());
   if (!safe) return;
 
   const { data, error } = await supabaseClient
     .from('sales')
     .select('address,postal_district,eircode,sale_date')
-    .or(`address.ilike.%${safe}%,eircode.ilike.%${safe}%`)
+    .or(`address.ilike.%${safe}%,eircode.ilike.%${safeEircode}%`)
     .order('sale_date', { ascending: false })
     .limit(30);
 
