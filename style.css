@@ -154,32 +154,35 @@ a {
   position: absolute;
   right: 34px;
   top: 50%;
-  width: 16px;
-  height: 16px;
-  margin-top: -8px;
+  width: 48px;
+  height: 4px;
+  margin-top: -2px;
   pointer-events: none;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .search-status-spinner {
   display: block;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  /* A ring with a bright arc sweeping around, iOS-style — the arc is the
-     "charging" sweep; the conic keeps thickness uniform and rotation smooth
-     where the old border-triangle looked janky. */
-  background: conic-gradient(
-    var(--scale-high) 0deg 270deg,
-    rgba(255, 255, 255, 0.14) 270deg 360deg
+  width: 40%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    rgba(95, 168, 245, 0.15),
+    var(--scale-high) 50%,
+    rgba(95, 168, 245, 0.15)
   );
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
-  animation: search-status-spin 0.8s linear infinite;
+  animation: search-status-sweep 1.1s ease-in-out infinite;
 }
 
-@keyframes search-status-spin {
+@keyframes search-status-sweep {
+  from {
+    transform: translateX(-130%);
+  }
   to {
-    transform: rotate(360deg);
+    transform: translateX(330%);
   }
 }
 
