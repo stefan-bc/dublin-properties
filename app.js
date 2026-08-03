@@ -932,6 +932,18 @@ const fetchAddressSuggestions = debounce(async (term) => {
   const q = term.trim();
   if (!q) return;
 
+  // Terms that match a postal district — even partially, since "dublin"
+  // (or any substring of it) appears in nearly every address — are
+  // pathological for the trigram search: the planner estimates a match over
+  // most of the ~250k rows, falls back to a sequential scan, and can exceed
+  // PostgREST's statement timeout. matchDistricts already answers these
+  // inputs fully on the client, so skip the network call for them.
+  if (matchDistricts(q).length > 0) {
+    addressMatches = [];
+    renderSuggestions(q);
+    return;
+  }
+
   // The term goes straight to the RPC as a bound parameter — no PostgREST
   // filter syntax is built here, so no escaping (or injection) is involved.
   const { data, error } = await pg('rpc/search_sales', { search_term: q, max_results: 30 });

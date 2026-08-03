@@ -88,32 +88,40 @@ grant select on sales_quarterly, sales_by_district, sales_by_type, sales_summary
 -- `set pg_trgm.word_similarity_threshold = ...` clause — Supabase's managed
 -- `postgres` role can SET that GUC at session level but is denied
 -- permission to set it as function config (proconfig), so this is the only
--- way to get the <% operator to pick up the threshold and use the GIN
--- trigram indexes below; without them, word_similarity() over all ~250k
--- rows blows past PostgREST's statement timeout. Runs as the invoker, so
--- RLS's public read policy governs it like any other query. PostgREST calls
--- it as an RPC with the term bound as a parameter (see app.js
--- fetchAddressSuggestions).
+-- way to get the <% operator to pick up the threshold. The term is injected
+-- into the query as a literal via format(%L) (safe quoting) rather than a
+-- bound parameter: PostgREST passes RPC arguments as prepared-statement
+-- parameters, and pg_trgm's GIN operators can only be planned when the term
+-- is a constant — with a parameter the planner falls back to a sequential
+-- scan of all ~250k rows, which blows past PostgREST's statement timeout on
+-- cold caches. Runs as the invoker, so RLS's public read policy governs it
+-- like any other query (app.js fetchAddressSuggestions).
 create or replace function search_sales(search_term text, max_results integer default 10)
 returns table (address text, postal_district text, eircode text, sale_date date)
-language sql
+language plpgsql
 stable
 as $$
-  select set_config('pg_trgm.word_similarity_threshold', '0.2', true);
+begin
+  perform set_config('pg_trgm.word_similarity_threshold', '0.2', true);
   -- Terms under three characters have too few trigrams to mean anything (a
   -- bare "d" would match nearly every address) — refuse them here rather
   -- than return a flood of noise; district suggestions already cover short
   -- input client-side.
-  select s.address, s.postal_district, s.eircode, s.sale_date
-  from sales s
-  where length(search_term) >= 3
-    and (search_term <% s.address or (s.eircode is not null and search_term <% s.eircode))
-  order by greatest(
-             word_similarity(search_term, s.address),
-             case when s.eircode is not null then word_similarity(search_term, s.eircode) else 0 end
-           ) desc,
-           s.sale_date desc
-  limit max_results;
+  return query execute format(
+    'select s.address, s.postal_district, s.eircode, s.sale_date
+       from sales s
+      where length(%L) >= 3
+        and (%L <%% s.address or (s.eircode is not null and %L <%% s.eircode))
+      order by greatest(
+                 word_similarity(%L, s.address),
+                 case when s.eircode is not null then word_similarity(%L, s.eircode) else 0 end
+               ) desc,
+               s.sale_date desc
+      limit %s',
+    search_term, search_term, search_term, search_term, search_term,
+    least(greatest(max_results, 0), 100)
+  );
+end
 $$;
 
 grant execute on function search_sales(text, integer) to anon, authenticated;
