@@ -399,6 +399,13 @@ function districtPathData(polys, bbox) {
 
 let mapTooltipEl, mapWrapEl;
 
+// Touch devices have no hover, so a tap fires straight to `click` with no
+// preview — the median-price/sale-count tooltip mouse users get for free is
+// never seen. Below this, taps preview-then-commit instead: first tap on a
+// district shows its tooltip, a second tap on the same one activates it.
+const supportsHover = matchMedia('(hover: hover)').matches;
+let touchPreviewKey = null;
+
 function positionMapTooltip(evt) {
   const wrapRect = mapWrapEl.getBoundingClientRect();
   mapTooltipEl.style.left = `${evt.clientX - wrapRect.left}px`;
@@ -511,16 +518,34 @@ function renderMap(rows) {
       path.setAttribute('aria-label', `${label}: no sales recorded`);
     }
 
-    path.addEventListener('mouseenter', (e) => showMapTooltip(e, label, row?.median_price, row?.sale_count));
-    path.addEventListener('mousemove', positionMapTooltip);
-    path.addEventListener('mouseleave', hideMapTooltip);
+    if (supportsHover) {
+      path.addEventListener('mouseenter', (e) => showMapTooltip(e, label, row?.median_price, row?.sale_count));
+      path.addEventListener('mousemove', positionMapTooltip);
+      path.addEventListener('mouseleave', hideMapTooltip);
+    }
     path.addEventListener('focus', (e) => showMapTooltip(e, label, row?.median_price, row?.sale_count));
     path.addEventListener('blur', hideMapTooltip);
 
     const activate = () => {
       districtFilterActivate(label);
     };
-    path.addEventListener('click', activate);
+
+    if (supportsHover) {
+      path.addEventListener('click', activate);
+    } else {
+      path.addEventListener('click', (e) => {
+        if (touchPreviewKey !== key) {
+          e.preventDefault();
+          touchPreviewKey = key;
+          showMapTooltip(e, label, row?.median_price, row?.sale_count);
+          return;
+        }
+        touchPreviewKey = null;
+        hideMapTooltip();
+        activate();
+      });
+    }
+
     path.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
@@ -1159,6 +1184,15 @@ const districtSelect = document.getElementById('filter-district');
 const typeSelect = document.getElementById('filter-type');
 mapWrapEl = document.getElementById('map-wrap');
 mapTooltipEl = document.getElementById('map-tooltip');
+
+if (!supportsHover) {
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.district-path')) {
+      touchPreviewKey = null;
+      hideMapTooltip();
+    }
+  });
+}
 
 // 100ms: tight enough that results follow the typing hand (search-as-you-type)
 // without firing a query mid-word on every keystroke. The queries are cheap
