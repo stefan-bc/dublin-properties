@@ -60,6 +60,23 @@ where postal_district is not null
 group by 1
 order by 1;
 
+-- Per-district time series, same shape as sales_quarterly but split by
+-- district. Backs the "Estimated value today" tile on the address view: a
+-- past sale's price is scaled by how much that district's median has moved
+-- between the sale's quarter and the latest one (see app.js
+-- estimateCurrentValue). A district/quarter with no sales simply has no row
+-- here, rather than a row with a zero count.
+create or replace view district_quarterly as
+select
+  postal_district,
+  date_trunc('quarter', sale_date)::date as quarter,
+  percentile_cont(0.5) within group (order by price) as median_price,
+  count(*) as sale_count
+from sales
+where postal_district is not null
+group by 1, 2
+order by 1, 2;
+
 create or replace view sales_by_type as
 select
   property_type,
@@ -78,7 +95,7 @@ select
   max(sale_date) as latest_sale_date
 from sales;
 
-grant select on sales_quarterly, sales_by_district, sales_by_type, sales_summary to anon, authenticated;
+grant select on sales_quarterly, sales_by_district, district_quarterly, sales_by_type, sales_summary to anon, authenticated;
 
 -- Fuzzy address search for the dashboard's suggestion dropdown. PPR addresses
 -- are free-text and don't always match how people type them — exact-substring

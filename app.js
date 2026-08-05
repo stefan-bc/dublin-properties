@@ -48,6 +48,52 @@ const quarterFmt = (isoDate) => {
   return `${d.getUTCFullYear()} Q${Math.floor(d.getUTCMonth() / 3) + 1}`;
 };
 
+// Matches Postgres's date_trunc('quarter', sale_date): first day of the
+// quarter the date falls in, as an ISO date string — the same key
+// district_quarterly/sales_quarterly group their rows by.
+const quarterKey = (isoDate) => {
+  const d = new Date(isoDate);
+  const q = Math.floor(d.getUTCMonth() / 3);
+  return new Date(Date.UTC(d.getUTCFullYear(), q * 3, 1)).toISOString().slice(0, 10);
+};
+
+// A quarter with too few sales gives a noisy median — a single sale in a
+// quiet quarter/district makes that quarter's "median" just that one price,
+// which can swing the estimate a long way from a real trend.
+const ESTIMATE_MIN_SAMPLE = 5;
+
+// Projects a past sale's price forward using how much prices in its area have
+// moved since. Prefers the sold district's own trend; falls back to the
+// Dublin-wide trend when the district doesn't have enough sales in the
+// relevant quarter(s) to trust. Returns null if neither series has enough
+// data to say anything.
+function estimateCurrentValue(latestSale, districtQuarters, cityQuarters) {
+  if (!latestSale?.price || !latestSale.sale_date) return null;
+  const saleQuarter = quarterKey(latestSale.sale_date);
+
+  const pick = (series) => {
+    if (!series.length) return null;
+    const base = series.find((r) => r.quarter === saleQuarter);
+    const current = series[series.length - 1]; // series ordered by quarter asc
+    if (!base || !current) return null;
+    if (base.sale_count < ESTIMATE_MIN_SAMPLE || current.sale_count < ESTIMATE_MIN_SAMPLE) return null;
+    return { base, current };
+  };
+
+  const districtPick = pick(districtQuarters);
+  const picked = districtPick ?? pick(cityQuarters);
+  if (!picked) return null;
+
+  const growth = picked.current.median_price / picked.base.median_price;
+  return {
+    value: latestSale.price * growth,
+    growthPct: (growth - 1) * 100,
+    basis: picked === districtPick ? latestSale.postal_district : 'Dublin-wide',
+    saleQuarter,
+    asOfQuarter: picked.current.quarter,
+  };
+}
+
 // The PPR source register mostly uses "New/Second-Hand Dwelling house
 // /Apartment", but a handful of rows (~23 out of 249k) record the same two
 // categories in Irish instead ("Teach/Árasán Cónaithe Nua/Atháimhe"), plus
@@ -114,7 +160,8 @@ function newBuildShareFromCounts(typeRows) {
 // labels are set with the values. Overview: the whole register since 2010.
 // Filtered: whatever matches the active search/filters. Address: that single
 // property's own record — where "New build share" is meaningless (a house is
-// either new-built once or not) and "Price range" says what actually matters.
+// either new-built once or not) and an estimate of today's value says what
+// actually matters.
 function setStatLabels(mode) {
   const labels = {
     total: document.getElementById('stat-total-label'),
@@ -125,7 +172,7 @@ function setStatLabels(mode) {
   if (mode === 'address') {
     labels.total.textContent = 'Sales recorded';
     labels.median.textContent = 'Latest sale price';
-    labels.newbuild.textContent = 'Price range';
+    labels.newbuild.textContent = 'Estimated value today';
     labels.latest.textContent = 'Latest sale recorded';
   } else if (mode === 'filtered') {
     labels.total.textContent = 'Matches';
@@ -138,10 +185,10 @@ function setStatLabels(mode) {
     labels.newbuild.textContent = 'New build share';
     labels.latest.textContent = 'Latest sale recorded';
   }
-  // The address view shows only Sales recorded + Latest sale price: the price
-  // range and latest-sale date are already in the sale-history table below
-  // the tiles, so repeating them up top is noise. Every other mode shows all
-  // four tiles.
+  // The address view hides "Latest sale recorded" (already in the table
+  // below) and starts "Estimated value today" hidden too — renderValueEstimate
+  // reveals it once the estimate for this address has actually loaded, so a
+  // stale figure from whatever address was open before never flashes up.
   document.getElementById('stat-newbuild-tile').hidden = mode === 'address';
   document.getElementById('stat-latest-tile').hidden = mode === 'address';
 }
@@ -907,20 +954,10 @@ function applyResultSet(data, cap, trueTotal) {
   setStatLabels('address');
   renderTable(data, cap, trueTotal);
   document.getElementById('address-detail').hidden = true; // re-shown by renderAddressDetail when relevant
+  document.getElementById('stats').classList.remove('is-loading'); // only loadDefaultView sets it; a deep link straight into an address view never would otherwise
   const latest = data.length ? data[0] : null; // rows come back ordered by sale_date desc
   setStat('stat-total', (trueTotal ?? data.length).toLocaleString());
   setStat('stat-median', latest && latest.price != null ? eur.format(latest.price) : '—');
-  const prices = data.map((r) => r.price).filter(Boolean);
-  const minPrice = prices.length ? Math.min(...prices) : null;
-  const maxPrice = prices.length ? Math.max(...prices) : null;
-  setStat(
-    'stat-newbuild',
-    prices.length > 1
-      ? `${eur.format(minPrice)} – ${eur.format(maxPrice)}`
-      : prices.length === 1
-        ? eur.format(minPrice)
-        : '—',
-  );
   setStat('stat-latest', latest ? latest.sale_date : '—');
 
   const capNote = document.getElementById('charts-cap-note');
@@ -930,6 +967,37 @@ function applyResultSet(data, cap, trueTotal) {
   } else {
     capNote.hidden = true;
   }
+}
+
+// Fetches the district's (and Dublin-wide) price-per-quarter series and
+// reveals the "Estimated value today" tile once estimateCurrentValue can say
+// something trustworthy about them — left hidden otherwise rather than
+// showing a number built on one or two sales. Runs after applyResultSet
+// rather than alongside it: it needs the resolved latest sale's district,
+// and it's a second round trip that shouldn't block the rest of the view
+// from rendering. requestId guards against a since-superseded address still
+// overwriting a newer one's tile once its fetch lands.
+async function renderValueEstimate(latestSale, requestId) {
+  const tile = document.getElementById('stat-newbuild-tile');
+  if (!latestSale?.postal_district) return;
+
+  const [{ data: districtQuarters }, { data: cityQuarters }] = await Promise.all([
+    pg('district_quarterly', {
+      select: 'quarter,median_price,sale_count',
+      postal_district: `eq.${latestSale.postal_district}`,
+      order: 'quarter.asc',
+    }),
+    pg('sales_quarterly', { select: 'quarter,median_price,sale_count', order: 'quarter.asc' }),
+  ]);
+  if (requestId !== viewRequestId) return; // superseded by a newer view request
+
+  const estimate = estimateCurrentValue(latestSale, districtQuarters || [], cityQuarters || []);
+  if (!estimate) return;
+
+  setStat('stat-newbuild', eur.format(estimate.value));
+  const sign = estimate.growthPct >= 0 ? '+' : '';
+  tile.title = `Based on the ${estimate.basis} price trend from ${quarterFmt(estimate.saleQuarter)} to ${quarterFmt(estimate.asOfQuarter)} (${sign}${estimate.growthPct.toFixed(0)}%). Not a valuation.`;
+  tile.hidden = false;
 }
 
 function buildFilterHeading(term, district, type) {
@@ -948,6 +1016,7 @@ function applyStatsPayload(agg) {
   setStatLabels('filtered');
   document.getElementById('address-detail').hidden = true;
   document.getElementById('charts-cap-note').hidden = true; // stats/charts cover all matches, not the page
+  document.getElementById('stats').classList.remove('is-loading'); // only loadDefaultView sets it; a deep link straight into a filtered view never would otherwise
   setStat('stat-total', agg.total.toLocaleString());
   setStat('stat-median', eur.format(agg.median_price));
   setStat('stat-newbuild', `${newBuildShareFromCounts(agg.types)}%`);
@@ -1056,6 +1125,7 @@ async function runAddressHistory(address) {
   setViewLoading(false); // clears the initial-load dim if this request overtook it
   setSearchPending(false);
   syncUrl(allowHistoryPush);
+  renderValueEstimate(data[0], requestId); // not awaited — a second round trip that shouldn't block the rest of the view
 }
 
 function debounce(fn, ms) {
