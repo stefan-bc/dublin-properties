@@ -233,7 +233,7 @@ Chart.defaults.animation = { duration: 450, easing: 'easeOutQuart' }; // subtle,
 const RESULT_LIMIT = 200;
 const RECENT_LIMIT = 50;
 
-let quarterlyChart, districtChart, typeChart;
+let quarterlyChart, districtChart, typeChart, rateChart;
 let districtOptions = [];
 let typeOptions = [];
 let addressMatches = [];
@@ -641,6 +641,136 @@ function renderType(rows) {
   });
 }
 
+// Fetched once and shared by both loadDefaultView and runFilteredView — it's
+// a national rate, not a per-view value, and both paths need it (including
+// loadInitialView's deep-link case, which can reach runFilteredView directly
+// on first load without loadDefaultView ever running, so this can't be read
+// off defaultViewCache without risking a null dereference there). Cached by
+// resolved value, not by promise-tied-to-an-abortable-request — a request
+// this small isn't worth wiring into the view AbortController family, and
+// caching an in-flight promise across an abort would risk permanently
+// caching an empty result.
+let rateSeriesCache = null;
+let rateSeriesFetch = null;
+async function getRateSeries() {
+  if (rateSeriesCache) return rateSeriesCache;
+  if (!rateSeriesFetch) {
+    rateSeriesFetch = pg('mortgage_rates', { select: 'quarter,rate_type,rate_pct,source', order: 'quarter.asc' })
+      .then((res) => {
+        rateSeriesCache = buildRateSeries(res.data || []);
+        return rateSeriesCache;
+      })
+      .finally(() => { rateSeriesFetch = null; });
+  }
+  return rateSeriesFetch;
+}
+
+// Splices the PDH mortgage rate into one representative per-quarter series:
+// the Central Bank's own new-business variable rate where it exists
+// (source='cbi', 2014 Q4 onward), falling back to the ECB blended-composite
+// backfill for 2010-2014 Q3 (source='ecb') — see supabase/schema.sql's
+// mortgage_rates comment for why these are two different methodologies
+// rather than one continuous series. Returns a Map keyed by quarter (ISO
+// date string) to {rate_pct, source}.
+function buildRateSeries(rateRows) {
+  const byQuarter = new Map();
+  for (const r of rateRows) {
+    if (r.rate_type !== 'pdh_variable' && r.rate_type !== 'pdh_blended_backfill') continue;
+    if (!byQuarter.has(r.quarter) || r.rate_type === 'pdh_variable') {
+      byQuarter.set(r.quarter, { rate_pct: Number(r.rate_pct), source: r.source });
+    }
+  }
+  return byQuarter;
+}
+
+// Sales volume (left axis) against the mortgage rate (right axis) — two
+// series on genuinely different scales, so they need independent y-axes
+// rather than one shared one flattening whichever has the smaller range.
+// `quarterlyRows` reflects whatever filter is active (same rows driving the
+// "Median price by quarter" chart); `rateSeries` is the module-wide splice
+// from buildRateSeries, which doesn't change with filters — it's a national
+// rate, not a per-district or per-type one.
+function renderRateOverlay(quarterlyRows, rateSeries) {
+  const rows = quarterlyRows.filter((r) => rateSeries.has(r.quarter));
+  const ctx = document.getElementById('chart-rate');
+  rateChart = upsertChart(rateChart, ctx, {
+    type: 'line',
+    data: {
+      labels: rows.map((r) => quarterFmt(r.quarter)),
+      datasets: [
+        {
+          label: 'Sales volume',
+          data: rows.map((r) => r.sale_count),
+          yAxisID: 'y',
+          borderColor: palette.series1,
+          backgroundColor: palette.series1 + '1a',
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: palette.series1,
+          pointHoverBorderColor: '#1a1a19',
+          pointHoverBorderWidth: 2,
+          fill: true,
+          tension: 0.15,
+        },
+        {
+          label: 'PDH mortgage rate',
+          data: rows.map((r) => rateSeries.get(r.quarter).rate_pct),
+          yAxisID: 'y1',
+          borderColor: palette.series2,
+          borderWidth: 2,
+          borderDash: [4, 3],
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: palette.series2,
+          pointHoverBorderColor: '#1a1a19',
+          pointHoverBorderWidth: 2,
+          fill: false,
+          tension: 0.15,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          display: true,
+          labels: { color: palette.textMuted, boxWidth: 12, boxHeight: 2, padding: 12 },
+        },
+        tooltip: {
+          ...tooltipBase(),
+          callbacks: {
+            label: (ctx) => (ctx.dataset.yAxisID === 'y1' ? `${ctx.parsed.y.toFixed(2)}%` : `${ctx.parsed.y.toLocaleString()} sales`),
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { color: palette.gridline, display: false },
+          border: { color: palette.baseline },
+          ticks: { color: palette.textMuted, maxTicksLimit: 10 },
+        },
+        y: {
+          position: 'left',
+          grid: { color: palette.gridline },
+          border: { display: false },
+          ticks: { color: palette.textMuted },
+          beginAtZero: true,
+        },
+        y1: {
+          position: 'right',
+          grid: { display: false },
+          border: { display: false },
+          ticks: { color: palette.textMuted, callback: (v) => `${v}%` },
+          beginAtZero: true,
+        },
+      },
+    },
+  });
+}
+
 // A single address is always exactly one district and one property type, so
 // those two charts are structurally meaningless there — hide them rather than
 // show a one-bar "chart" that isn't telling the reader anything. The quarterly
@@ -650,6 +780,7 @@ function setChartsMode(mode, rows = []) {
   const districtCard = document.getElementById('card-district');
   const typeCard = document.getElementById('card-type');
   const mapCard = document.getElementById('card-map');
+  const rateCard = document.getElementById('card-rate');
   const quarterlyCard = document.getElementById('card-quarterly');
   const quarterlyHeading = document.getElementById('chart-quarterly-heading');
   const emptyNote = document.getElementById('charts-empty-note');
@@ -658,6 +789,7 @@ function setChartsMode(mode, rows = []) {
     districtCard.hidden = true;
     typeCard.hidden = true;
     mapCard.hidden = true; // same reasoning as the district bar chart — one address is one district
+    rateCard.hidden = true; // the national mortgage rate isn't meaningful next to one address's own history
     quarterlyHeading.textContent = 'Price history for this address';
     if (rows.length < 2) {
       quarterlyCard.hidden = true;
@@ -671,6 +803,7 @@ function setChartsMode(mode, rows = []) {
     districtCard.hidden = false;
     typeCard.hidden = false;
     mapCard.hidden = false;
+    rateCard.hidden = false;
     quarterlyCard.hidden = false;
     emptyNote.hidden = true;
     quarterlyHeading.textContent = 'Median price by quarter';
@@ -870,7 +1003,7 @@ async function loadDefaultView() {
 
   if (!defaultViewCache) {
     const signal = viewAbort.signal;
-    const [summaryRes, quarterly, district, type, recent] = await Promise.all([
+    const [summaryRes, quarterly, district, type, recent, rates] = await Promise.all([
       pg('sales_summary', { select: '*' }, { signal }),
       pg('sales_quarterly', { select: '*' }, { signal }),
       pg('sales_by_district', { select: '*' }, { signal }),
@@ -880,6 +1013,7 @@ async function loadDefaultView() {
         order: 'sale_date.desc',
         limit: RECENT_LIMIT,
       }, { signal }),
+      getRateSeries(),
     ]);
     if (requestId !== viewRequestId) return; // a newer view request has since started
     defaultViewCache = {
@@ -888,10 +1022,11 @@ async function loadDefaultView() {
       district: district.data || [],
       type: type.data || [],
       recent: recent.data || [],
+      rateSeries: rates,
     };
   }
 
-  const { summary, quarterly, district, type, recent } = defaultViewCache;
+  const { summary, quarterly, district, type, recent, rateSeries } = defaultViewCache;
   setStatLabels('aggregate');
   if (summary) {
     // The all-time total ("since 2010") is contextless next to a live
@@ -914,6 +1049,7 @@ async function loadDefaultView() {
   renderDistrict(district);
   renderMap(district);
   renderType(mergeTypeRows(type));
+  renderRateOverlay(quarterly, rateSeries);
   renderTable(recent, RECENT_LIMIT);
 
   districtOptions = district.map((d) => ({
@@ -1019,7 +1155,7 @@ function buildFilterHeading(term, district, type) {
 // (see supabase/schema.sql): server-computed medians and series that cover
 // every matching sale, not just the 200-row page. `rows` in the payload is
 // the capped page for the table; `total` is the true match count.
-function applyStatsPayload(agg) {
+function applyStatsPayload(agg, rateSeries) {
   setStatLabels('filtered');
   document.getElementById('address-detail').hidden = true;
   document.getElementById('charts-cap-note').hidden = true; // stats/charts cover all matches, not the page
@@ -1033,6 +1169,7 @@ function applyStatsPayload(agg) {
   renderDistrict(agg.districts);
   renderMap(agg.districts);
   renderType(mergeTypeRows(agg.types));
+  renderRateOverlay(agg.quarterly, rateSeries);
 }
 
 // The single query path behind search text, the district select, the
@@ -1066,16 +1203,19 @@ async function runFilteredView() {
   // (see PROPERTY_TYPE_LABELS), including the Irish-language variants, and
   // pass them '|'-joined.
   const typeGroup = type ? typeOptions.find((t) => t.label === type) : null;
-  const { data, error } = await pg(
-    'rpc/sales_stats',
-    {
-      p_term: term || null,
-      p_district: district || null,
-      p_types: typeGroup ? typeGroup.values.join('|') : null,
-      p_include_non_market: includeNonMarket,
-    },
-    { signal: viewAbort.signal },
-  );
+  const [{ data, error }, rateSeries] = await Promise.all([
+    pg(
+      'rpc/sales_stats',
+      {
+        p_term: term || null,
+        p_district: district || null,
+        p_types: typeGroup ? typeGroup.values.join('|') : null,
+        p_include_non_market: includeNonMarket,
+      },
+      { signal: viewAbort.signal },
+    ),
+    getRateSeries(),
+  ]);
   if (requestId !== viewRequestId) return; // superseded by a newer view request
   if (error) {
     console.error(error);
@@ -1091,7 +1231,7 @@ async function runFilteredView() {
 
   document.getElementById('table-heading').textContent = buildFilterHeading(term, district, type);
   renderTable(agg.rows, RESULT_LIMIT, agg.total);
-  applyStatsPayload(agg);
+  applyStatsPayload(agg, rateSeries);
   setViewLoading(false); // clears the initial-load dim if this search overtook it
   setSearchPending(false);
   syncUrl(allowHistoryPush);
