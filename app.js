@@ -17,7 +17,14 @@ const REST_HEADERS = { apikey: SUPABASE_ANON_KEY };
 // caller has to special-case it — the viewRequestId guards already make
 // stale results harmless.
 async function pg(table, params, { exactCount = false, signal } = {}) {
-  const qs = new URLSearchParams(params).toString();
+  // URLSearchParams stringifies a JS `null` as the literal text "null"
+  // rather than omitting it — e.g. runFilteredView's `p_term: term || null`
+  // would otherwise send p_term=null as a real search term, which
+  // sales_stats' `coalesce(p_term, '') <> ''` treats as non-empty and
+  // filters every row out. Drop null/undefined entries so an absent filter
+  // is actually absent, letting the RPC's own `default null` apply.
+  const definedParams = Object.fromEntries(Object.entries(params).filter(([, v]) => v != null));
+  const qs = new URLSearchParams(definedParams).toString();
   const headers = exactCount ? { ...REST_HEADERS, Prefer: 'count=exact' } : REST_HEADERS;
   try {
     const res = await fetch(`${REST_URL}/${table}?${qs}`, { headers, signal });
