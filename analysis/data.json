@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-08-03T22:53:09.714Z",
-  "total_sales": 249311,
-  "overall_median_price": 352423,
-  "latest_sale_date": "2026-07-24",
-  "non_market_count": 10917,
-  "vat_exclusive_count": 42668,
+  "generated_at": "2026-08-16T23:36:05.528Z",
+  "total_sales": 249748,
+  "overall_median_price": 353000,
+  "latest_sale_date": "2026-07-31",
+  "non_market_count": 10931,
+  "vat_exclusive_count": 42768,
   "market_median_2010": 286000,
   "market_median_2025": 482000,
-  "new_build_share_pct": 17.85561006132902,
+  "new_build_share_pct": 17.86560853340167,
   "quarterly": [
     {
       "quarter": "2010-01-01",
@@ -227,7 +227,7 @@
     {
       "quarter": "2020-10-01",
       "median_price": 354000,
-      "sale_count": 5469
+      "sale_count": 5471
     },
     {
       "quarter": "2021-01-01",
@@ -302,7 +302,7 @@
     {
       "quarter": "2024-07-01",
       "median_price": 455000,
-      "sale_count": 4943
+      "sale_count": 4944
     },
     {
       "quarter": "2024-10-01",
@@ -332,17 +332,17 @@
     {
       "quarter": "2026-01-01",
       "median_price": 475000,
-      "sale_count": 3837
+      "sale_count": 3838
     },
     {
       "quarter": "2026-04-01",
       "median_price": 470000,
-      "sale_count": 4286
+      "sale_count": 4333
     },
     {
       "quarter": "2026-07-01",
-      "median_price": 477750,
-      "sale_count": 872
+      "median_price": 480000,
+      "sale_count": 1258
     }
   ],
   "volume_by_year": [
@@ -388,7 +388,7 @@
     },
     {
       "year": 2020,
-      "count": 14775
+      "count": 14777
     },
     {
       "year": 2021,
@@ -404,7 +404,7 @@
     },
     {
       "year": 2024,
-      "count": 19269
+      "count": 19270
     },
     {
       "year": 2025,
@@ -412,7 +412,7 @@
     },
     {
       "year": 2026,
-      "count": 8995
+      "count": 9429
     }
   ],
   "annual_median": [
@@ -489,129 +489,129 @@
     {
       "district": "Co. Dublin",
       "median_price": 343612,
-      "sale_count": 113905
+      "sale_count": 114063
     },
     {
       "district": "Dublin 15",
       "median_price": 320000,
-      "sale_count": 14922
+      "sale_count": 14943
     },
     {
       "district": "Dublin 24",
-      "median_price": 287500,
-      "sale_count": 8953
+      "median_price": 288000,
+      "sale_count": 8985
     },
     {
       "district": "Dublin 8",
       "median_price": 310000,
-      "sale_count": 8816
+      "sale_count": 8837
     },
     {
       "district": "Dublin 7",
-      "median_price": 332000,
-      "sale_count": 8115
+      "median_price": 332250,
+      "sale_count": 8128
     },
     {
       "district": "Dublin 18",
       "median_price": 490000,
-      "sale_count": 8020
+      "sale_count": 8036
     },
     {
       "district": "Dublin 4",
       "median_price": 565000,
-      "sale_count": 8002
+      "sale_count": 8022
     },
     {
       "district": "Dublin 9",
-      "median_price": 371000,
-      "sale_count": 7414
+      "median_price": 372000,
+      "sale_count": 7425
     },
     {
       "district": "Dublin 12",
       "median_price": 330000,
-      "sale_count": 7300
+      "sale_count": 7314
     },
     {
       "district": "Dublin 11",
-      "median_price": 255000,
-      "sale_count": 6617
+      "median_price": 255038.5,
+      "sale_count": 6636
     },
     {
       "district": "Dublin 14",
       "median_price": 550000,
-      "sale_count": 6506
+      "sale_count": 6518
     },
     {
       "district": "Dublin 3",
-      "median_price": 402500,
-      "sale_count": 6345
+      "median_price": 403000,
+      "sale_count": 6356
     },
     {
       "district": "Dublin 6",
       "median_price": 600000,
-      "sale_count": 6072
+      "sale_count": 6084
     },
     {
       "district": "Dublin 13",
-      "median_price": 388000,
-      "sale_count": 5932
+      "median_price": 389000,
+      "sale_count": 5950
     },
     {
       "district": "Dublin 16",
       "median_price": 485000,
-      "sale_count": 5881
+      "sale_count": 5892
     },
     {
       "district": "Dublin 5",
       "median_price": 385000,
-      "sale_count": 5630
+      "sale_count": 5640
     },
     {
       "district": "Dublin 22",
       "median_price": 270000,
-      "sale_count": 4970
+      "sale_count": 4981
     },
     {
       "district": "Dublin 1",
-      "median_price": 272000,
-      "sale_count": 4635
+      "median_price": 273000,
+      "sale_count": 4644
     },
     {
       "district": "Dublin 6W",
       "median_price": 560000,
-      "sale_count": 3440
+      "sale_count": 3446
     },
     {
       "district": "Dublin 2",
       "median_price": 395000,
-      "sale_count": 2985
+      "sale_count": 2989
     },
     {
       "district": "Dublin 10",
-      "median_price": 222500,
-      "sale_count": 1932
+      "median_price": 223000,
+      "sale_count": 1935
     },
     {
       "district": "Dublin 17",
-      "median_price": 256500,
-      "sale_count": 1460
+      "median_price": 257000,
+      "sale_count": 1464
     },
     {
       "district": "Dublin 20",
       "median_price": 320000,
-      "sale_count": 1459
+      "sale_count": 1460
     }
   ],
   "types": [
     {
       "property_type": "Second-Hand Dwelling house /Apartment",
       "median_price": 350000,
-      "sale_count": 204773
+      "sale_count": 205107
     },
     {
       "property_type": "New Dwelling house /Apartment",
-      "median_price": 374449.33,
-      "sale_count": 44515
+      "median_price": 374449.34,
+      "sale_count": 44618
     },
     {
       "property_type": "Teach/Árasán Cónaithe Atháimhe",
@@ -683,10 +683,10 @@
     },
     {
       "district": "Co. Dublin",
-      "pct_change": 77.06896551724138,
-      "cagr": 3.882604610984175,
+      "pct_change": 76.8103448275862,
+      "cagr": 3.87248255865813,
       "median_2010": 290000,
-      "median_2025": 513500
+      "median_2025": 512750
     },
     {
       "district": "Dublin 22",
@@ -808,9 +808,9 @@
       "district": "Dublin 8",
       "new_build_count": 28,
       "resale_count": 4024,
-      "premium_pct": 73.52691218130312,
+      "premium_pct": 73.28147100424329,
       "new_build_median": 612550,
-      "resale_median": 353000
+      "resale_median": 353500
     },
     {
       "district": "Dublin 6",
@@ -856,9 +856,9 @@
       "district": "Dublin 9",
       "new_build_count": 34,
       "resale_count": 3578,
-      "premium_pct": 33.18900531600711,
+      "premium_pct": 32.9534115566038,
       "new_build_median": 563722.4650000001,
-      "resale_median": 423250
+      "resale_median": 424000
     },
     {
       "district": "Dublin 22",
@@ -903,7 +903,7 @@
     {
       "district": "Dublin 24",
       "new_build_count": 206,
-      "resale_count": 4639,
+      "resale_count": 4641,
       "premium_pct": 13.882781733746134,
       "new_build_median": 367841.385,
       "resale_median": 323000
@@ -936,14 +936,14 @@
       "district": "Co. Dublin",
       "new_build_count": 15842,
       "resale_count": 21001,
-      "premium_pct": -1.7408926940639238,
-      "new_build_median": 430374.89,
+      "premium_pct": -1.82648401826484,
+      "new_build_median": 430000,
       "resale_median": 438000
     },
     {
       "district": "Dublin 6W",
       "new_build_count": 24,
-      "resale_count": 1609,
+      "resale_count": 1610,
       "premium_pct": -7.50394944707741,
       "new_build_median": 585500,
       "resale_median": 633000
@@ -1050,11 +1050,11 @@
     },
     {
       "year": 2020,
-      "count": 14224,
+      "count": 14226,
       "p10": 219950,
       "p25": 275000,
       "p50": 360000,
-      "p75": 497797.36,
+      "p75": 498000,
       "p90": 725000
     },
     {
@@ -1086,12 +1086,12 @@
     },
     {
       "year": 2024,
-      "count": 18153,
+      "count": 18154,
       "p10": 276000,
       "p25": 355000,
       "p50": 446000,
       "p75": 630000,
-      "p90": 923300
+      "p90": 925000
     },
     {
       "year": 2025,
@@ -1104,9 +1104,9 @@
     },
     {
       "year": 2026,
-      "count": 8677,
+      "count": 9097,
       "p10": 310000,
-      "p25": 385000,
+      "p25": 386000,
       "p50": 480000,
       "p75": 665000,
       "p90": 970000
@@ -1138,7 +1138,7 @@
   "seasonality": [
     {
       "month": "Jan",
-      "count": 14400,
+      "count": 14401,
       "median_price": 335000
     },
     {
@@ -1158,22 +1158,22 @@
     },
     {
       "month": "May",
-      "count": 18750,
+      "count": 18751,
       "median_price": 338000
     },
     {
       "month": "Jun",
-      "count": 20281,
+      "count": 20323,
       "median_price": 345000
     },
     {
       "month": "Jul",
-      "count": 21816,
+      "count": 22192,
       "median_price": 350000
     },
     {
       "month": "Aug",
-      "count": 19220,
+      "count": 19221,
       "median_price": 345000
     },
     {
@@ -1193,8 +1193,670 @@
     },
     {
       "month": "Dec",
-      "count": 27689,
+      "count": 27691,
       "median_price": 330046
+    }
+  ],
+  "mortgage_rate_overlay": [
+    {
+      "quarter": "2010-01-01",
+      "sale_count": 1425,
+      "rate_pct": 2.9,
+      "source": "ecb"
+    },
+    {
+      "quarter": "2010-04-01",
+      "sale_count": 1804,
+      "rate_pct": 3.03,
+      "source": "ecb"
+    },
+    {
+      "quarter": "2010-07-01",
+      "sale_count": 2001,
+      "rate_pct": 3.34,
+      "source": "ecb"
+    },
+    {
+      "quarter": "2010-10-01",
+      "sale_count": 1690,
+      "rate_pct": 3.23,
+      "source": "ecb"
+    },
+    {
+      "quarter": "2011-01-01",
+      "sale_count": 1077,
+      "rate_pct": 3.36,
+      "source": "ecb"
+    },
+    {
+      "quarter": "2011-04-01",
+      "sale_count": 1263,
+      "rate_pct": 3.51,
+      "source": "ecb"
+    },
+    {
+      "quarter": "2011-07-01",
+      "sale_count": 1670,
+      "rate_pct": 3.84,
+      "source": "ecb"
+    },
+    {
+      "quarter": "2011-10-01",
+      "sale_count": 1891,
+      "rate_pct": 3.29,
+      "source": "ecb"
+    },
+    {
+      "quarter": "2012-01-01",
+      "sale_count": 1434,
+      "rate_pct": 3.44,
+      "source": "ecb"
+    },
+    {
+      "quarter": "2012-04-01",
+      "sale_count": 1945,
+      "rate_pct": 3.25,
+      "source": "ecb"
+    },
+    {
+      "quarter": "2012-07-01",
+      "sale_count": 2335,
+      "rate_pct": 3.29,
+      "source": "ecb"
+    },
+    {
+      "quarter": "2012-10-01",
+      "sale_count": 3206,
+      "rate_pct": 3.59,
+      "source": "ecb"
+    },
+    {
+      "quarter": "2013-01-01",
+      "sale_count": 1588,
+      "rate_pct": 3.33,
+      "source": "ecb"
+    },
+    {
+      "quarter": "2013-04-01",
+      "sale_count": 2058,
+      "rate_pct": 3.37,
+      "source": "ecb"
+    },
+    {
+      "quarter": "2013-07-01",
+      "sale_count": 2868,
+      "rate_pct": 3.5,
+      "source": "ecb"
+    },
+    {
+      "quarter": "2013-10-01",
+      "sale_count": 3861,
+      "rate_pct": 3.44,
+      "source": "ecb"
+    },
+    {
+      "quarter": "2014-01-01",
+      "sale_count": 2193,
+      "rate_pct": 3.4,
+      "source": "ecb"
+    },
+    {
+      "quarter": "2014-04-01",
+      "sale_count": 2918,
+      "rate_pct": 3.33,
+      "source": "ecb"
+    },
+    {
+      "quarter": "2014-07-01",
+      "sale_count": 3811,
+      "rate_pct": 3.57,
+      "source": "ecb"
+    },
+    {
+      "quarter": "2014-10-01",
+      "sale_count": 5247,
+      "rate_pct": 4.2,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2015-01-01",
+      "sale_count": 3475,
+      "rate_pct": 4.14,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2015-04-01",
+      "sale_count": 4062,
+      "rate_pct": 4.12,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2015-07-01",
+      "sale_count": 3818,
+      "rate_pct": 3.96,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2015-10-01",
+      "sale_count": 4071,
+      "rate_pct": 3.75,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2016-01-01",
+      "sale_count": 3238,
+      "rate_pct": 3.63,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2016-04-01",
+      "sale_count": 3501,
+      "rate_pct": 3.57,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2016-07-01",
+      "sale_count": 4156,
+      "rate_pct": 3.47,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2016-10-01",
+      "sale_count": 4899,
+      "rate_pct": 3.4,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2017-01-01",
+      "sale_count": 3627,
+      "rate_pct": 3.38,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2017-04-01",
+      "sale_count": 3993,
+      "rate_pct": 3.34,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2017-07-01",
+      "sale_count": 4782,
+      "rate_pct": 3.41,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2017-10-01",
+      "sale_count": 5572,
+      "rate_pct": 3.32,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2018-01-01",
+      "sale_count": 3925,
+      "rate_pct": 3.31,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2018-04-01",
+      "sale_count": 4389,
+      "rate_pct": 3.13,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2018-07-01",
+      "sale_count": 4886,
+      "rate_pct": 3.13,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2018-10-01",
+      "sale_count": 5477,
+      "rate_pct": 3.12,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2019-01-01",
+      "sale_count": 3759,
+      "rate_pct": 3.14,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2019-04-01",
+      "sale_count": 4383,
+      "rate_pct": 3.13,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2019-07-01",
+      "sale_count": 4875,
+      "rate_pct": 3.15,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2019-10-01",
+      "sale_count": 5424,
+      "rate_pct": 3.12,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2020-01-01",
+      "sale_count": 3603,
+      "rate_pct": 3.09,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2020-04-01",
+      "sale_count": 2493,
+      "rate_pct": 3.12,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2020-07-01",
+      "sale_count": 3210,
+      "rate_pct": 3.13,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2020-10-01",
+      "sale_count": 5471,
+      "rate_pct": 3.13,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2021-01-01",
+      "sale_count": 3700,
+      "rate_pct": 3.09,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2021-04-01",
+      "sale_count": 3750,
+      "rate_pct": 3.09,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2021-07-01",
+      "sale_count": 4517,
+      "rate_pct": 3.1,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2021-10-01",
+      "sale_count": 5124,
+      "rate_pct": 3.07,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2022-01-01",
+      "sale_count": 3975,
+      "rate_pct": 3.09,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2022-04-01",
+      "sale_count": 4332,
+      "rate_pct": 3.1,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2022-07-01",
+      "sale_count": 5100,
+      "rate_pct": 3.11,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2022-10-01",
+      "sale_count": 5055,
+      "rate_pct": 2.98,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2023-01-01",
+      "sale_count": 4010,
+      "rate_pct": 3.18,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2023-04-01",
+      "sale_count": 4414,
+      "rate_pct": 3.41,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2023-07-01",
+      "sale_count": 5105,
+      "rate_pct": 3.85,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2023-10-01",
+      "sale_count": 5380,
+      "rate_pct": 4.06,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2024-01-01",
+      "sale_count": 3651,
+      "rate_pct": 4.21,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2024-04-01",
+      "sale_count": 4492,
+      "rate_pct": 4.21,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2024-07-01",
+      "sale_count": 4944,
+      "rate_pct": 4.15,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2024-10-01",
+      "sale_count": 6183,
+      "rate_pct": 4.12,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2025-01-01",
+      "sale_count": 3923,
+      "rate_pct": 4.12,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2025-04-01",
+      "sale_count": 4604,
+      "rate_pct": 4.12,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2025-07-01",
+      "sale_count": 5110,
+      "rate_pct": 4.1,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2025-10-01",
+      "sale_count": 5576,
+      "rate_pct": 4.09,
+      "source": "cbi"
+    },
+    {
+      "quarter": "2026-01-01",
+      "sale_count": 3838,
+      "rate_pct": 4.09,
+      "source": "cbi"
+    }
+  ],
+  "mortgage_rate_splice_quarter": "2014-10-01",
+  "price_to_rent": [
+    {
+      "district": "Dublin 6",
+      "median_price": 600000,
+      "price_year": 2021,
+      "avg_monthly_rent": 1508.28,
+      "rent_quarter": "2021-10-01",
+      "ratio_years": 33.150343437558014
+    },
+    {
+      "district": "Dublin 6W",
+      "median_price": 610000,
+      "price_year": 2021,
+      "avg_monthly_rent": 1758.55,
+      "rent_quarter": "2021-10-01",
+      "ratio_years": 28.906390681716946
+    },
+    {
+      "district": "Dublin 14",
+      "median_price": 610000,
+      "price_year": 2021,
+      "avg_monthly_rent": 2020.77,
+      "rent_quarter": "2021-10-01",
+      "ratio_years": 25.155427551543884
+    },
+    {
+      "district": "Dublin 4",
+      "median_price": 599119,
+      "price_year": 2021,
+      "avg_monthly_rent": 2132.77,
+      "rent_quarter": "2021-10-01",
+      "ratio_years": 23.409267447185275
+    },
+    {
+      "district": "Dublin 18",
+      "median_price": 520000,
+      "price_year": 2021,
+      "avg_monthly_rent": 1860.22,
+      "rent_quarter": "2021-10-01",
+      "ratio_years": 23.29473574810148
+    },
+    {
+      "district": "Dublin 9",
+      "median_price": 397000,
+      "price_year": 2021,
+      "avg_monthly_rent": 1497.96,
+      "rent_quarter": "2021-10-01",
+      "ratio_years": 22.085591960622
+    },
+    {
+      "district": "Dublin 3",
+      "median_price": 420775,
+      "price_year": 2021,
+      "avg_monthly_rent": 1614.1,
+      "rent_quarter": "2021-10-01",
+      "ratio_years": 21.72392251615968
+    },
+    {
+      "district": "Dublin 7",
+      "median_price": 365000,
+      "price_year": 2021,
+      "avg_monthly_rent": 1443.58,
+      "rent_quarter": "2021-10-01",
+      "ratio_years": 21.07030207308682
+    },
+    {
+      "district": "Dublin 16",
+      "median_price": 525000,
+      "price_year": 2021,
+      "avg_monthly_rent": 2107.24,
+      "rent_quarter": "2021-10-01",
+      "ratio_years": 20.76175471232513
+    },
+    {
+      "district": "Dublin 5",
+      "median_price": 402000,
+      "price_year": 2021,
+      "avg_monthly_rent": 1635.36,
+      "rent_quarter": "2021-07-01",
+      "ratio_years": 20.48478622443988
+    },
+    {
+      "district": "Dublin 20",
+      "median_price": 364000,
+      "price_year": 2021,
+      "avg_monthly_rent": 1565.87,
+      "rent_quarter": "2021-07-01",
+      "ratio_years": 19.371552768322616
+    },
+    {
+      "district": "Dublin 13",
+      "median_price": 386000,
+      "price_year": 2021,
+      "avg_monthly_rent": 1806.14,
+      "rent_quarter": "2021-10-01",
+      "ratio_years": 17.809619778459403
+    },
+    {
+      "district": "Dublin 2",
+      "median_price": 410000,
+      "price_year": 2021,
+      "avg_monthly_rent": 1976.11,
+      "rent_quarter": "2021-10-01",
+      "ratio_years": 17.289860719629306
+    },
+    {
+      "district": "Dublin 1",
+      "median_price": 300000,
+      "price_year": 2021,
+      "avg_monthly_rent": 1452.85,
+      "rent_quarter": "2021-10-01",
+      "ratio_years": 17.207557559280037
+    },
+    {
+      "district": "Dublin 12",
+      "median_price": 350000,
+      "price_year": 2021,
+      "avg_monthly_rent": 1699.21,
+      "rent_quarter": "2021-10-01",
+      "ratio_years": 17.164839346912192
+    },
+    {
+      "district": "Dublin 8",
+      "median_price": 330000,
+      "price_year": 2021,
+      "avg_monthly_rent": 1638.6,
+      "rent_quarter": "2021-10-01",
+      "ratio_years": 16.782619309166364
+    },
+    {
+      "district": "Dublin 15",
+      "median_price": 325000,
+      "price_year": 2021,
+      "avg_monthly_rent": 1628.43,
+      "rent_quarter": "2021-10-01",
+      "ratio_years": 16.631561278859596
+    },
+    {
+      "district": "Dublin 24",
+      "median_price": 291000,
+      "price_year": 2021,
+      "avg_monthly_rent": 1668.57,
+      "rent_quarter": "2021-10-01",
+      "ratio_years": 14.5334028539408
+    },
+    {
+      "district": "Dublin 11",
+      "median_price": 273000,
+      "price_year": 2021,
+      "avg_monthly_rent": 1576.91,
+      "rent_quarter": "2021-10-01",
+      "ratio_years": 14.426948906405563
+    },
+    {
+      "district": "Dublin 10",
+      "median_price": 250000,
+      "price_year": 2021,
+      "avg_monthly_rent": 1461.8,
+      "rent_quarter": "2021-07-01",
+      "ratio_years": 14.251835636429973
+    },
+    {
+      "district": "Dublin 17",
+      "median_price": 264000,
+      "price_year": 2021,
+      "avg_monthly_rent": 1592.75,
+      "rent_quarter": "2021-07-01",
+      "ratio_years": 13.812588290692199
+    }
+  ],
+  "price_to_rent_districts_excluded": 1,
+  "price_to_rent_trend": [
+    {
+      "year": 2010,
+      "median_price": 270000,
+      "avg_monthly_rent": 1066.61,
+      "ratio_years": 21.09487066500408
+    },
+    {
+      "year": 2011,
+      "median_price": 244500,
+      "avg_monthly_rent": 1006.02,
+      "ratio_years": 20.253076479592853
+    },
+    {
+      "year": 2012,
+      "median_price": 208000,
+      "avg_monthly_rent": 1015.29,
+      "ratio_years": 17.07229789846579
+    },
+    {
+      "year": 2013,
+      "median_price": 221000,
+      "avg_monthly_rent": 1036.02,
+      "ratio_years": 17.776362103691692
+    },
+    {
+      "year": 2014,
+      "median_price": 252500,
+      "avg_monthly_rent": 1104.82,
+      "ratio_years": 19.045334684986393
+    },
+    {
+      "year": 2015,
+      "median_price": 267500,
+      "avg_monthly_rent": 1217.92,
+      "ratio_years": 18.303063145909967
+    },
+    {
+      "year": 2016,
+      "median_price": 297500,
+      "avg_monthly_rent": 1309.66,
+      "ratio_years": 18.929849477472523
+    },
+    {
+      "year": 2017,
+      "median_price": 320112.8875,
+      "avg_monthly_rent": 1422.86,
+      "ratio_years": 18.74820710283045
+    },
+    {
+      "year": 2018,
+      "median_price": 334801,
+      "avg_monthly_rent": 1550.48,
+      "ratio_years": 17.994481278915774
+    },
+    {
+      "year": 2019,
+      "median_price": 335500,
+      "avg_monthly_rent": 1651.52,
+      "ratio_years": 16.928849383194475
+    },
+    {
+      "year": 2020,
+      "median_price": 354863.75,
+      "avg_monthly_rent": 1717.49,
+      "ratio_years": 17.218137611669743
+    },
+    {
+      "year": 2021,
+      "median_price": 374750,
+      "avg_monthly_rent": 1731.27,
+      "ratio_years": 18.038299437214686
+    },
+    {
+      "year": 2022,
+      "median_price": 397940.53,
+      "avg_monthly_rent": 1795.91,
+      "ratio_years": 18.46512956291425
+    },
+    {
+      "year": 2023,
+      "median_price": 412024.22750000004,
+      "avg_monthly_rent": 1894.96,
+      "ratio_years": 18.11930188060258
+    },
+    {
+      "year": 2024,
+      "median_price": 438325.5,
+      "avg_monthly_rent": 2009.79,
+      "ratio_years": 18.174597843555794
+    },
+    {
+      "year": 2025,
+      "median_price": 467500,
+      "avg_monthly_rent": 2114.32,
+      "ratio_years": 18.425939939712688
     }
   ],
   "yoy_growth": [

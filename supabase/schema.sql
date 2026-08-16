@@ -245,3 +245,72 @@ end
 $$;
 
 grant execute on function sales_stats(text, text, text, boolean) to anon, authenticated;
+
+-- External market-context data, joined against `sales` in the analysis layer
+-- (analysis/generate-report.mjs) to answer questions the PPR data alone
+-- can't: did mortgage rate rises coincide with the price/volume slowdown,
+-- and how does buying compare to renting by district. Both are quarterly,
+-- both come from official Irish/EU sources, both ingested idempotently the
+-- same way as `sales` (see scripts/ingest-mortgage-rates.mjs and
+-- scripts/ingest-rent-index.mjs).
+
+-- Principal Dwelling House mortgage rates on new business, by rate type, one
+-- row per (quarter, rate_type). 2015-Q1 onward is the Central Bank of
+-- Ireland's own Table B.3.1 (source='cbi') — a real, market-aggregated rate
+-- per type, not fragmented by bank. Pre-2015 has no CBI equivalent, so
+-- 2010-2014 is backfilled from the ECB's blended composite Irish house-
+-- purchase rate (rate_type='pdh_blended_backfill', source='ecb') — a
+-- different methodology (all mortgage types averaged, not variable-only),
+-- which is why it's a distinct rate_type rather than silently extending
+-- 'pdh_variable' backwards. The analysis layer prefers 'pdh_variable' where
+-- both exist and flags the source break rather than smoothing over it.
+create table if not exists mortgage_rates (
+  quarter date not null,           -- first day of the quarter, e.g. 2015-01-01
+  rate_type text not null,         -- 'pdh_variable' | 'pdh_tracker' | 'pdh_fixed_up_to_1y' | 'pdh_fixed_1_3y' | 'pdh_fixed_over_3y' | 'pdh_blended_backfill'
+  rate_pct numeric(5,2) not null,
+  source text not null,            -- 'cbi' | 'ecb'
+  primary key (quarter, rate_type)
+);
+
+create index if not exists mortgage_rates_quarter_idx on mortgage_rates (quarter);
+
+alter table mortgage_rates enable row level security;
+
+drop policy if exists "public read access" on mortgage_rates;
+create policy "public read access" on mortgage_rates
+  for select
+  using (true);
+
+grant select on mortgage_rates to anon, authenticated;
+
+-- Average monthly rent, RTB Rent Index via CSO table RIQ02, "All bedrooms" /
+-- "All property types" only (the finer breakdowns exist upstream but aren't
+-- ingested — out of scope for a price-to-rent ratio). One row per (quarter,
+-- district); `district` is either a real postal district ('Dublin 14') in
+-- the same naming as sales.postal_district, or the literal 'Dublin' for the
+-- county-wide aggregate — NOT the same thing as sales' 'Co. Dublin' bucket
+-- (that's PPR sales outside the 22 core districts; this is CSO's own
+-- county-level rent rollup). Small-area cells are null-suppressed by CSO in
+-- recent quarters for low sample size — those quarters are simply absent
+-- here rather than stored as a fabricated value, so the analysis layer falls
+-- back to the county-wide 'Dublin' row when a district's latest quarter is
+-- missing.
+create table if not exists rent_index (
+  quarter date not null,           -- first day of the quarter, e.g. 2025-10-01
+  district text not null,
+  avg_rent_eur numeric(9,2) not null,
+  source text not null default 'rtb_cso',
+  primary key (quarter, district)
+);
+
+create index if not exists rent_index_quarter_idx on rent_index (quarter);
+create index if not exists rent_index_district_idx on rent_index (district);
+
+alter table rent_index enable row level security;
+
+drop policy if exists "public read access" on rent_index;
+create policy "public read access" on rent_index
+  for select
+  using (true);
+
+grant select on rent_index to anon, authenticated;

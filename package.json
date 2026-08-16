@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "ingest": "node scripts/ingest.mjs",
+    "ingest:rates": "node scripts/ingest-mortgage-rates.mjs",
+    "ingest:rent": "node scripts/ingest-rent-index.mjs",
     "test": "node --test",
     "lint": "eslint ."
   },

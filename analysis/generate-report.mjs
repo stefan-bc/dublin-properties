@@ -39,6 +39,20 @@ async function get(apiPath, params = {}) {
   return res.json();
 }
 
+// Paginated fetch for small tables that don't need the pairs/percentile
+// machinery above — mortgage_rates and rent_index are both well under 10k
+// rows, but PostgREST caps a single response at 1000 rows regardless.
+async function getAll(apiPath, params) {
+  const rows = [];
+  for (let offset = 0; ; offset += 1000) {
+    const page = await get(apiPath, { ...params, limit: '1000', offset: String(offset) });
+    rows.push(...page);
+    if (page.length < 1000) break;
+    await sleep(30);
+  }
+  return rows;
+}
+
 // Fetches every price for a filter, paginated, and returns its median.
 // `pairs` is an array of [key, value] pairs so the same column can be
 // filtered twice (e.g. sale_date gte + lte) — plain objects can't express
@@ -260,6 +274,75 @@ const seasonality = MONTHS.map((name, m) => ({
   median_price: median(seasonPools[m].prices),
 }));
 
+// --- Mortgage rates vs sales volume ------------------------------------------
+// Splices two sources into one representative PDH new-business rate series:
+// the Central Bank's own variable rate from 2014 Q4 onward (source='cbi'),
+// and an ECB blended-composite backfill for 2010-2014 Q3 where no CBI
+// equivalent exists (source='ecb', a different methodology — all mortgage
+// types averaged, not variable-only). The splice point is kept visible in
+// the output rather than smoothed into one unlabeled line.
+const mortgageRatesRaw = await getAll('mortgage_rates', { select: 'quarter,rate_type,rate_pct,source', order: 'quarter.asc' });
+const rateByQuarter = new Map();
+for (const r of mortgageRatesRaw) {
+  if (r.rate_type !== 'pdh_variable' && r.rate_type !== 'pdh_blended_backfill') continue;
+  if (!rateByQuarter.has(r.quarter) || r.rate_type === 'pdh_variable') {
+    rateByQuarter.set(r.quarter, { rate_pct: Number(r.rate_pct), source: r.source });
+  }
+}
+const rateSpliceQuarter = mortgageRatesRaw.find((r) => r.rate_type === 'pdh_variable')?.quarter ?? null;
+
+const rateOverlay = quarterly
+  .map((q) => ({ quarter: q.quarter, sale_count: q.sale_count, ...rateByQuarter.get(q.quarter) }))
+  .filter((q) => q.rate_pct != null);
+
+// --- Price-to-rent ratio -----------------------------------------------------
+// "Years of rent to buy": median sale price divided by annualised rent (RTB
+// average monthly rent x 12). Split into two views rather than one, because
+// RTB/CSO's own small-area suppression makes a single "current" number
+// dishonest either way:
+// - Per-district: verified against the live data (not just a documented
+//   suppression edge case) that every one of the 22 postal districts stops
+//   publishing after Q3/Q4 2021 — only the county-wide 'Dublin' rollup is
+//   current. So each district's ratio uses its own last-published quarter,
+//   compared against the sale-price median for that SAME calendar year
+//   (comparing a 2021 rent to 2023-2025 sale prices would inflate the ratio
+//   with price growth the rent side can't reflect). The snapshot year is
+//   carried in the output so it's never presented as "now".
+// - County-wide: 'Dublin' is published every quarter back to 2010, so that
+//   one series gets an honest full 2010-2025 trend instead of a single
+//   dated snapshot.
+const rentRows = await getAll('rent_index', { select: 'quarter,district,avg_rent_eur', order: 'quarter.desc' });
+const latestRentByDistrict = new Map();
+for (const r of rentRows) {
+  if (!latestRentByDistrict.has(r.district)) latestRentByDistrict.set(r.district, r);
+}
+
+const priceToRent = [];
+let districtsMissingRent = 0;
+for (const district of districts) {
+  if (district === 'Co. Dublin') continue; // no direct RTB/CSO analogue — not the same catch-all as their county rollup
+  const rent = latestRentByDistrict.get(district);
+  if (!rent) { districtsMissingRent++; continue; }
+  const year = Number(rent.quarter.slice(0, 4));
+  const med = await medianFor([...districtEq(district), ...MARKET, ...yearRange(year)]);
+  await sleep(30);
+  if (!med) continue;
+  priceToRent.push({
+    district,
+    median_price: med,
+    price_year: year,
+    avg_monthly_rent: rent.avg_rent_eur,
+    rent_quarter: rent.quarter,
+    ratio_years: med / (rent.avg_rent_eur * 12),
+  });
+}
+priceToRent.sort((a, b) => b.ratio_years - a.ratio_years);
+
+const countyRentByYear = new Map();
+for (const r of rentRows) {
+  if (r.district === 'Dublin') countyRentByYear.set(r.quarter.slice(0, 4), r.avg_rent_eur);
+}
+
 // --- Derived figures --------------------------------------------------------
 
 const yearVolume = new Map();
@@ -281,6 +364,13 @@ for (const q of quarterly) {
 const annualMedian = [...medianByYear.entries()]
   .map(([year, prices]) => ({ year: Number(year), median_price: median(prices) }))
   .sort((a, b) => a.year - b.year);
+
+const priceToRentTrend = annualMedian
+  .filter((a) => countyRentByYear.has(String(a.year)))
+  .map((a) => {
+    const avg_monthly_rent = countyRentByYear.get(String(a.year));
+    return { year: a.year, median_price: a.median_price, avg_monthly_rent, ratio_years: a.median_price / (avg_monthly_rent * 12) };
+  });
 
 const growthRows = growth
   .filter((g) => g.median_2010 && g.median_2025)
@@ -329,6 +419,11 @@ const data = {
   distribution,
   size_bands: sizeBands,
   seasonality,
+  mortgage_rate_overlay: rateOverlay,
+  mortgage_rate_splice_quarter: rateSpliceQuarter,
+  price_to_rent: priceToRent,
+  price_to_rent_districts_excluded: districtsMissingRent,
+  price_to_rent_trend: priceToRentTrend,
   yoy_growth: annualMedian
     .map((a, i) => i && annualMedian[i - 1].median_price
       ? { year: a.year, pct_change: ((a.median_price - annualMedian[i - 1].median_price) / annualMedian[i - 1].median_price) * 100 }
@@ -425,6 +520,56 @@ function hBarChart({ title, subtitle, rows, fmt, width = 920, rowH = 21, barH = 
   <text x="${pad.l}" y="30" font-size="11" fill="${MUTED}">${subtitle}</text>
   ${grid}
   ${bars}
+</svg>`;
+}
+
+// Two series on shared x, independent y-scales (left: volume, right: rate %)
+// — sales volume and mortgage rate live on completely different scales, so
+// one shared axis would flatten one of them into a near-flat line.
+function dualLineChart({ title, subtitle, xLabels, leftSeries, leftFmt, rightSeries, rightFmt, splitIndex, width = 920, height = 330 }) {
+  const pad = { l: 60, r: 60, t: 34, b: 34 };
+  const lMin = Math.min(...leftSeries) * 0.9;
+  const lMax = Math.max(...leftSeries) * 1.05;
+  const rMin = 0;
+  const rMax = Math.max(...rightSeries) * 1.15;
+  const lTicks = niceTicks(lMin, lMax, 5);
+  const rTicks = niceTicks(rMin, rMax, 5);
+  const x = (i) => pad.l + (i / (xLabels.length - 1)) * (width - pad.l - pad.r);
+  const yL = (v) => pad.t + (1 - (v - lMin) / (lMax - lMin)) * (height - pad.t - pad.b);
+  const yR = (v) => pad.t + (1 - (v - rMin) / (rMax - rMin)) * (height - pad.t - pad.b);
+  const step = Math.max(1, Math.ceil(xLabels.length / 12));
+
+  const gridL = lTicks
+    .map((t) => `<line x1="${pad.l}" y1="${yL(t)}" x2="${width - pad.r}" y2="${yL(t)}" stroke="${GRID}"/>
+      <text x="${pad.l - 8}" y="${yL(t) + 4}" text-anchor="end" fill="${MUTED}" font-size="11">${leftFmt(t)}</text>`)
+    .join('\n    ');
+  const ticksR = rTicks
+    .map((t) => `<text x="${width - pad.r + 8}" y="${yR(t) + 4}" text-anchor="start" fill="${RED}" font-size="11">${rightFmt(t)}</text>`)
+    .join('\n    ');
+  const labels = xLabels
+    .map((_, i) => (i % step === 0 || i === xLabels.length - 1 ? `<text x="${x(i)}" y="${height - 12}" text-anchor="middle" fill="${MUTED}" font-size="10">${xLabels[i]}</text>` : ''))
+    .join('\n    ');
+  const leftPts = leftSeries.map((v, i) => `${x(i).toFixed(1)},${yL(v).toFixed(1)}`).join(' ');
+  const rightPts = rightSeries.map((v, i) => `${x(i).toFixed(1)},${yR(v).toFixed(1)}`).join(' ');
+  const splitLine = splitIndex != null && splitIndex > 0
+    ? `<line x1="${x(splitIndex).toFixed(1)}" y1="${pad.t}" x2="${x(splitIndex).toFixed(1)}" y2="${height - pad.b}" stroke="${MUTED}" stroke-width="1" stroke-dasharray="3,3"/>
+       <text x="${(x(splitIndex) + 4).toFixed(1)}" y="${pad.t + 10}" font-size="9" fill="${MUTED}">CBI data starts</text>`
+    : '';
+  const legend = `<line x1="640" y1="18" x2="656" y2="18" stroke="${BLUE}" stroke-width="2"/><text x="661" y="22" font-size="10" fill="${MUTED}">sales volume</text>`
+    + `<line x1="780" y1="18" x2="796" y2="18" stroke="${RED}" stroke-width="2"/><text x="801" y="22" font-size="10" fill="${MUTED}">mortgage rate</text>`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+  <text x="${pad.l}" y="18" font-size="14" font-weight="600" fill="${INK}">${title}</text>
+  <text x="${pad.l}" y="30" font-size="11" fill="${MUTED}">${subtitle}</text>
+  ${legend}
+  <line x1="${pad.l}" y1="${pad.t}" x2="${pad.l}" y2="${height - pad.b}" stroke="${INK}" stroke-width="1"/>
+  <line x1="${pad.l}" y1="${height - pad.b}" x2="${width - pad.r}" y2="${height - pad.b}" stroke="${INK}" stroke-width="1"/>
+  ${gridL}
+  ${ticksR}
+  ${splitLine}
+  <polyline points="${leftPts}" fill="none" stroke="${BLUE}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  <polyline points="${rightPts}" fill="none" stroke="${RED}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  ${labels}
 </svg>`;
 }
 
@@ -534,6 +679,32 @@ const yoyChart = lineChart({
   fmt: pct0,
 });
 
+const rateOverlayChart = dualLineChart({
+  title: 'Sales volume vs PDH mortgage rate, by quarter',
+  subtitle: 'Blue: quarterly sale count (left axis). Red: new-business PDH mortgage rate, % (right axis). Dashed line: pre-2014 Q4 is an ECB blended-composite backfill, not CBI’s own series.',
+  xLabels: rateOverlay.map((r) => r.quarter.slice(0, 7).replace('-', ' Q')),
+  leftSeries: rateOverlay.map((r) => r.sale_count),
+  leftFmt: (v) => Math.round(v).toLocaleString('en-IE'),
+  rightSeries: rateOverlay.map((r) => r.rate_pct),
+  rightFmt: (v) => `${v.toFixed(1)}%`,
+  splitIndex: rateSpliceQuarter ? rateOverlay.findIndex((r) => r.quarter === rateSpliceQuarter) : null,
+});
+
+const priceToRentChart = hBarChart({
+  title: 'Price-to-rent ratio by district (dated snapshot)',
+  subtitle: `Median sale price ÷ (RTB average monthly rent × 12), each district's own last-published rent quarter — mostly ${priceToRent.length ? Math.min(...priceToRent.map((p) => p.price_year)) : '?'}–${priceToRent.length ? Math.max(...priceToRent.map((p) => p.price_year)) : '?'}, not current. RTB/CSO stopped publishing district-level rent after that; ${districtsMissingRent} district(s) have none at all.`,
+  rows: priceToRent.map((p) => ({ label: `${p.district} (${p.price_year})`, value: p.ratio_years, valueLabel: `${p.ratio_years.toFixed(1)}y` })),
+  fmt: (v) => `${v.toFixed(0)}y`,
+});
+
+const priceToRentTrendChart = lineChart({
+  title: 'Price-to-rent ratio, Dublin-wide, by year',
+  subtitle: 'All-Dublin median sale price ÷ (county-wide RTB average monthly rent × 12) — years of rent to equal the buy price.',
+  series: priceToRentTrend.map((p) => p.ratio_years),
+  xLabels: priceToRentTrend.map((p) => String(p.year)),
+  fmt: (v) => `${v.toFixed(0)}y`,
+});
+
 await fs.writeFile(path.join(dir, 'charts', 'quarterly-median.svg'), quarterlyLine);
 await fs.writeFile(path.join(dir, 'charts', 'volume-by-year.svg'), volumeChart);
 await fs.writeFile(path.join(dir, 'charts', 'district-growth.svg'), growthChart);
@@ -542,6 +713,9 @@ await fs.writeFile(path.join(dir, 'charts', 'price-distribution.svg'), distribut
 await fs.writeFile(path.join(dir, 'charts', 'size-band-per-sqm.svg'), sizeChart);
 await fs.writeFile(path.join(dir, 'charts', 'seasonality.svg'), seasonalityChart);
 await fs.writeFile(path.join(dir, 'charts', 'yoy-growth.svg'), yoyChart);
+await fs.writeFile(path.join(dir, 'charts', 'rate-vs-volume.svg'), rateOverlayChart);
+await fs.writeFile(path.join(dir, 'charts', 'price-to-rent.svg'), priceToRentChart);
+await fs.writeFile(path.join(dir, 'charts', 'price-to-rent-trend.svg'), priceToRentTrendChart);
 
 // --- Summary for the report writer ------------------------------------------
 
@@ -573,6 +747,13 @@ console.log(JSON.stringify(
     seasonPeak: seasonality.reduce((a, s) => (s.count > a.count ? s : a), seasonality[0]),
     seasonTrough: seasonality.reduce((a, s) => (s.count < a.count ? s : a), seasonality[0]),
     yoyLatest: data.yoy_growth.at(-1),
+    rateLatest: rateOverlay.at(-1),
+    ratePeak: rateOverlay.reduce((a, r) => (r.rate_pct > a.rate_pct ? r : a), rateOverlay[0]),
+    priceToRentTop: priceToRent.slice(0, 3).map((p) => ({ d: p.district, y: +p.ratio_years.toFixed(1), year: p.price_year })),
+    priceToRentBottom: priceToRent.slice(-3).map((p) => ({ d: p.district, y: +p.ratio_years.toFixed(1), year: p.price_year })),
+    priceToRentDistrictsExcluded: districtsMissingRent,
+    priceToRentTrendLatest: priceToRentTrend.at(-1),
+    priceToRentTrendFirst: priceToRentTrend[0],
   },
   null,
   2,

@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="330" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+  <text x="60" y="18" font-size="14" font-weight="600" fill="#3d3d39">Sales volume vs PDH mortgage rate, by quarter</text>
+  <text x="60" y="30" font-size="11" fill="#6b6a63">Blue: quarterly sale count (left axis). Red: new-business PDH mortgage rate, % (right axis). Dashed line: pre-2014 Q4 is an ECB blended-composite backfill, not CBI’s own series.</text>
+  <line x1="640" y1="18" x2="656" y2="18" stroke="#3987e5" stroke-width="2"/><text x="661" y="22" font-size="10" fill="#6b6a63">sales volume</text><line x1="780" y1="18" x2="796" y2="18" stroke="#c04343" stroke-width="2"/><text x="801" y="22" font-size="10" fill="#6b6a63">mortgage rate</text>
+  <line x1="60" y1="34" x2="60" y2="296" stroke="#3d3d39" stroke-width="1"/>
+  <line x1="60" y1="296" x2="860" y2="296" stroke="#3d3d39" stroke-width="1"/>
+  <line x1="60" y1="247.10433924513615" x2="860" y2="247.10433924513615" stroke="#e6e6e3"/>
+      <text x="52" y="251.10433924513615" text-anchor="end" fill="#6b6a63" font-size="11">2,000</text>
+    <line x1="60" y1="152.2257892211449" x2="860" y2="152.2257892211449" stroke="#e6e6e3"/>
+      <text x="52" y="156.2257892211449" text-anchor="end" fill="#6b6a63" font-size="11">4,000</text>
+    <line x1="60" y1="57.347239197153655" x2="860" y2="57.347239197153655" stroke="#e6e6e3"/>
+      <text x="52" y="61.347239197153655" text-anchor="end" fill="#6b6a63" font-size="11">6,000</text>
+  <text x="868" y="300" text-anchor="start" fill="#c04343" font-size="11">0.0%</text>
+    <text x="868" y="191.769079830631" text-anchor="start" fill="#c04343" font-size="11">2.0%</text>
+    <text x="868" y="83.538159661262" text-anchor="start" fill="#c04343" font-size="11">4.0%</text>
+  <line x1="297.5" y1="34" x2="297.5" y2="296" stroke="#6b6a63" stroke-width="1" stroke-dasharray="3,3"/>
+       <text x="301.5" y="44" font-size="9" fill="#6b6a63">CBI data starts</text>
+  <polyline points="60.0,274.4 72.5,256.4 85.0,247.1 97.5,261.8 110.0,290.9 122.5,282.1 135.0,262.8 147.5,252.3 160.0,274.0 172.5,249.7 185.0,231.2 197.5,189.9 210.0,266.6 222.5,244.4 235.0,205.9 247.5,158.8 260.0,237.9 272.5,203.6 285.0,161.2 297.5,93.1 310.0,177.1 322.5,149.3 335.0,160.9 347.5,148.9 360.0,188.4 372.5,175.9 385.0,144.8 397.5,109.6 410.0,169.9 422.5,152.6 435.0,115.1 447.5,77.7 460.0,155.8 472.5,133.8 485.0,110.2 497.5,82.2 510.0,163.7 522.5,134.1 535.0,110.7 547.5,84.7 560.0,171.1 572.5,223.7 585.0,189.7 597.5,82.4 610.0,166.5 622.5,164.1 635.0,127.7 647.5,98.9 660.0,153.4 672.5,136.5 685.0,100.0 697.5,102.2 710.0,151.8 722.5,132.6 735.0,99.8 747.5,86.8 760.0,168.8 772.5,128.9 785.0,107.4 797.5,48.7 810.0,155.9 822.5,123.6 835.0,99.6 847.5,77.5 860.0,159.9" fill="none" stroke="#3987e5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  <polyline points="60.0,139.1 72.5,132.0 85.0,115.3 97.5,121.2 110.0,114.2 122.5,106.1 135.0,88.2 147.5,118.0 160.0,109.8 172.5,120.1 185.0,118.0 197.5,101.7 210.0,115.8 222.5,113.6 235.0,106.6 247.5,109.8 260.0,112.0 272.5,115.8 285.0,102.8 297.5,68.7 310.0,72.0 322.5,73.0 335.0,81.7 347.5,93.1 360.0,99.6 372.5,102.8 385.0,108.2 397.5,112.0 410.0,113.1 422.5,115.3 435.0,111.5 447.5,116.3 460.0,116.9 472.5,126.6 485.0,126.6 497.5,127.2 510.0,126.1 522.5,126.6 535.0,125.5 547.5,127.2 560.0,128.8 572.5,127.2 585.0,126.6 597.5,126.6 610.0,128.8 622.5,128.8 635.0,128.2 647.5,129.9 660.0,128.8 672.5,128.2 685.0,127.7 697.5,134.7 710.0,123.9 722.5,111.5 735.0,87.7 747.5,76.3 760.0,68.2 772.5,68.2 785.0,71.4 797.5,73.0 810.0,73.0 822.5,73.0 835.0,74.1 847.5,74.7 860.0,74.7" fill="none" stroke="#c04343" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  <text x="60" y="318" text-anchor="middle" fill="#6b6a63" font-size="10">2010 Q01</text>
+    
+    
+    
+    
+    
+    <text x="135" y="318" text-anchor="middle" fill="#6b6a63" font-size="10">2011 Q07</text>
+    
+    
+    
+    
+    
+    <text x="210" y="318" text-anchor="middle" fill="#6b6a63" font-size="10">2013 Q01</text>
+    
+    
+    
+    
+    
+    <text x="285" y="318" text-anchor="middle" fill="#6b6a63" font-size="10">2014 Q07</text>
+    
+    
+    
+    
+    
+    <text x="360" y="318" text-anchor="middle" fill="#6b6a63" font-size="10">2016 Q01</text>
+    
+    
+    
+    
+    
+    <text x="435" y="318" text-anchor="middle" fill="#6b6a63" font-size="10">2017 Q07</text>
+    
+    
+    
+    
+    
+    <text x="510" y="318" text-anchor="middle" fill="#6b6a63" font-size="10">2019 Q01</text>
+    
+    
+    
+    
+    
+    <text x="585" y="318" text-anchor="middle" fill="#6b6a63" font-size="10">2020 Q07</text>
+    
+    
+    
+    
+    
+    <text x="660" y="318" text-anchor="middle" fill="#6b6a63" font-size="10">2022 Q01</text>
+    
+    
+    
+    
+    
+    <text x="735" y="318" text-anchor="middle" fill="#6b6a63" font-size="10">2023 Q07</text>
+    
+    
+    
+    
+    
+    <text x="810" y="318" text-anchor="middle" fill="#6b6a63" font-size="10">2025 Q01</text>
+    
+    
+    
+    <text x="860" y="318" text-anchor="middle" fill="#6b6a63" font-size="10">2026 Q01</text>
+</svg>

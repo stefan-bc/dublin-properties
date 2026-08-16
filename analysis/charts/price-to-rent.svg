@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="489" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+  <text x="92" y="18" font-size="14" font-weight="600" fill="#3d3d39">Price-to-rent ratio by district (dated snapshot)</text>
+  <text x="92" y="30" font-size="11" fill="#6b6a63">Median sale price ÷ (RTB average monthly rent × 12), each district's own last-published rent quarter — mostly 2021–2021, not current. RTB/CSO stopped publishing district-level rent after that; 1 district(s) have none at all.</text>
+  <line x1="92" y1="34" x2="92" y2="475" stroke="#e6e6e3"/>
+      <text x="92" y="487" text-anchor="middle" fill="#6b6a63" font-size="10">0y</text>
+    <line x1="314.622128" y1="34" x2="314.622128" y2="475" stroke="#e6e6e3"/>
+      <text x="314.622128" y="487" text-anchor="middle" fill="#6b6a63" font-size="10">10y</text>
+    <line x1="537.244256" y1="34" x2="537.244256" y2="475" stroke="#e6e6e3"/>
+      <text x="537.244256" y="487" text-anchor="middle" fill="#6b6a63" font-size="10">20y</text>
+    <line x1="759.866384" y1="34" x2="759.866384" y2="475" stroke="#e6e6e3"/>
+      <text x="759.866384" y="487" text-anchor="middle" fill="#6b6a63" font-size="10">30y</text>
+  <text x="84" y="48.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 6 (2021)</text>
+      <rect x="92.0" y="38.5" width="738.0" height="12" rx="2" fill="#3987e5"/>
+      <text x="836.0" y="48.5" fill="#3d3d39" font-size="11">33.2y</text>
+    <text x="84" y="69.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 6W (2021)</text>
+      <rect x="92.0" y="59.5" width="643.5" height="12" rx="2" fill="#3987e5"/>
+      <text x="741.5" y="69.5" fill="#3d3d39" font-size="11">28.9y</text>
+    <text x="84" y="90.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 14 (2021)</text>
+      <rect x="92.0" y="80.5" width="560.0" height="12" rx="2" fill="#3987e5"/>
+      <text x="658.0" y="90.5" fill="#3d3d39" font-size="11">25.2y</text>
+    <text x="84" y="111.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 4 (2021)</text>
+      <rect x="92.0" y="101.5" width="521.1" height="12" rx="2" fill="#3987e5"/>
+      <text x="619.1" y="111.5" fill="#3d3d39" font-size="11">23.4y</text>
+    <text x="84" y="132.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 18 (2021)</text>
+      <rect x="92.0" y="122.5" width="518.6" height="12" rx="2" fill="#3987e5"/>
+      <text x="616.6" y="132.5" fill="#3d3d39" font-size="11">23.3y</text>
+    <text x="84" y="153.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 9 (2021)</text>
+      <rect x="92.0" y="143.5" width="491.7" height="12" rx="2" fill="#3987e5"/>
+      <text x="589.7" y="153.5" fill="#3d3d39" font-size="11">22.1y</text>
+    <text x="84" y="174.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 3 (2021)</text>
+      <rect x="92.0" y="164.5" width="483.6" height="12" rx="2" fill="#3987e5"/>
+      <text x="581.6" y="174.5" fill="#3d3d39" font-size="11">21.7y</text>
+    <text x="84" y="195.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 7 (2021)</text>
+      <rect x="92.0" y="185.5" width="469.1" height="12" rx="2" fill="#3987e5"/>
+      <text x="567.1" y="195.5" fill="#3d3d39" font-size="11">21.1y</text>
+    <text x="84" y="216.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 16 (2021)</text>
+      <rect x="92.0" y="206.5" width="462.2" height="12" rx="2" fill="#3987e5"/>
+      <text x="560.2" y="216.5" fill="#3d3d39" font-size="11">20.8y</text>
+    <text x="84" y="237.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 5 (2021)</text>
+      <rect x="92.0" y="227.5" width="456.0" height="12" rx="2" fill="#3987e5"/>
+      <text x="554.0" y="237.5" fill="#3d3d39" font-size="11">20.5y</text>
+    <text x="84" y="258.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 20 (2021)</text>
+      <rect x="92.0" y="248.5" width="431.3" height="12" rx="2" fill="#3987e5"/>
+      <text x="529.3" y="258.5" fill="#3d3d39" font-size="11">19.4y</text>
+    <text x="84" y="279.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 13 (2021)</text>
+      <rect x="92.0" y="269.5" width="396.5" height="12" rx="2" fill="#3987e5"/>
+      <text x="494.5" y="279.5" fill="#3d3d39" font-size="11">17.8y</text>
+    <text x="84" y="300.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 2 (2021)</text>
+      <rect x="92.0" y="290.5" width="384.9" height="12" rx="2" fill="#3987e5"/>
+      <text x="482.9" y="300.5" fill="#3d3d39" font-size="11">17.3y</text>
+    <text x="84" y="321.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 1 (2021)</text>
+      <rect x="92.0" y="311.5" width="383.1" height="12" rx="2" fill="#3987e5"/>
+      <text x="481.1" y="321.5" fill="#3d3d39" font-size="11">17.2y</text>
+    <text x="84" y="342.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 12 (2021)</text>
+      <rect x="92.0" y="332.5" width="382.1" height="12" rx="2" fill="#3987e5"/>
+      <text x="480.1" y="342.5" fill="#3d3d39" font-size="11">17.2y</text>
+    <text x="84" y="363.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 8 (2021)</text>
+      <rect x="92.0" y="353.5" width="373.6" height="12" rx="2" fill="#3987e5"/>
+      <text x="471.6" y="363.5" fill="#3d3d39" font-size="11">16.8y</text>
+    <text x="84" y="384.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 15 (2021)</text>
+      <rect x="92.0" y="374.5" width="370.3" height="12" rx="2" fill="#3987e5"/>
+      <text x="468.3" y="384.5" fill="#3d3d39" font-size="11">16.6y</text>
+    <text x="84" y="405.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 24 (2021)</text>
+      <rect x="92.0" y="395.5" width="323.5" height="12" rx="2" fill="#3987e5"/>
+      <text x="421.5" y="405.5" fill="#3d3d39" font-size="11">14.5y</text>
+    <text x="84" y="426.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 11 (2021)</text>
+      <rect x="92.0" y="416.5" width="321.2" height="12" rx="2" fill="#3987e5"/>
+      <text x="419.2" y="426.5" fill="#3d3d39" font-size="11">14.4y</text>
+    <text x="84" y="447.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 10 (2021)</text>
+      <rect x="92.0" y="437.5" width="317.3" height="12" rx="2" fill="#3987e5"/>
+      <text x="415.3" y="447.5" fill="#3d3d39" font-size="11">14.3y</text>
+    <text x="84" y="468.5" text-anchor="end" fill="#3d3d39" font-size="11">Dublin 17 (2021)</text>
+      <rect x="92.0" y="458.5" width="307.5" height="12" rx="2" fill="#3987e5"/>
+      <text x="405.5" y="468.5" fill="#3d3d39" font-size="11">13.8y</text>
+</svg>
