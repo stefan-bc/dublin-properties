@@ -889,7 +889,7 @@ const RATE_TYPE_LABELS = {
   pdh_fixed_over_3y: 'Fixed (3yr+)',
   pdh_blended_backfill: 'Blended (ECB backfill)',
 };
-const RATE_SOURCE_LABELS = { cbi: 'Central Bank of Ireland', ecb: 'ECB' };
+const RATE_SOURCE_LABELS = { cbi: 'CBI', ecb: 'ECB' };
 
 // Raw browsable views of the two external tables joined in alongside the
 // sales register (see supabase/schema.sql) — both small enough (a few
