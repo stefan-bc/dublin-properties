@@ -16,7 +16,7 @@ const REST_HEADERS = { apikey: SUPABASE_ANON_KEY };
 // queued behind it); an aborted request resolves to a silent no-op so no
 // caller has to special-case it — the viewRequestId guards already make
 // stale results harmless.
-async function pg(table, params, { exactCount = false, signal } = {}) {
+async function pg(table, params, { exactCount = false, signal, range } = {}) {
   // URLSearchParams stringifies a JS `null` as the literal text "null"
   // rather than omitting it — e.g. runFilteredView's `p_term: term || null`
   // would otherwise send p_term=null as a real search term, which
@@ -25,7 +25,12 @@ async function pg(table, params, { exactCount = false, signal } = {}) {
   // is actually absent, letting the RPC's own `default null` apply.
   const definedParams = Object.fromEntries(Object.entries(params).filter(([, v]) => v != null));
   const qs = new URLSearchParams(definedParams).toString();
-  const headers = exactCount ? { ...REST_HEADERS, Prefer: 'count=exact' } : REST_HEADERS;
+  const headers = { ...REST_HEADERS };
+  if (exactCount) headers.Prefer = 'count=exact';
+  // Fetches exactly one row at a known sorted index (e.g. a median point)
+  // via the Range header instead of pulling every row to compute it
+  // client-side — same technique analysis/generate-report.mjs uses.
+  if (range) headers.Range = range;
   try {
     const res = await fetch(`${REST_URL}/${table}?${qs}`, { headers, signal });
     if (!res.ok) return { data: null, error: await res.text(), count: null };
@@ -163,6 +168,46 @@ function newBuildShareFromCounts(typeRows) {
   return total ? Math.round((newCount / total) * 100) : 0;
 }
 
+const NEW_BUILD_RAW_TYPES = Object.entries(PROPERTY_TYPE_LABELS)
+  .filter(([, label]) => label === 'New Build')
+  .map(([raw]) => raw);
+
+// Median price and new-build share, computed live over the same trailing
+// window as the "Sales past 12 months" count tile, rather than the all-time
+// register (sales_summary/sales_by_type cover 2010-present). An all-time
+// median blends 2010 prices in with 2026 ones and would read as "today's
+// typical price" when it isn't — the same reasoning loadDefaultView already
+// applies to the total-sales tile, extended to the other two so all three
+// describe the same period instead of silently mixing timeframes. Cheap
+// regardless of table size: two exact-count requests (Content-Range header
+// only, ?limit=1 keeps the body trivial) plus one indexed point-fetch for
+// the median itself, via pg()'s `range` option — no full-table pull.
+async function trailingWindowStats(sinceDate) {
+  const base = { sale_date: `gte.${sinceDate}`, not_full_market_price: 'eq.false' };
+  const [totalRes, newBuildRes] = await Promise.all([
+    pg('sales', { ...base, select: 'id', limit: '1' }, { exactCount: true }),
+    pg('sales', {
+      ...base,
+      select: 'id',
+      limit: '1',
+      property_type: `in.(${NEW_BUILD_RAW_TYPES.map((t) => `"${t}"`).join(',')})`,
+    }, { exactCount: true }),
+  ]);
+  const total = totalRes.count || 0;
+  const newBuildCount = newBuildRes.count || 0;
+  if (!total) return { medianPrice: null, newBuildSharePct: 0 };
+  const midIdx = Math.floor((total - 1) / 2);
+  const priceRes = await pg(
+    'sales',
+    { ...base, select: 'price', order: 'price.asc' },
+    { range: `${midIdx}-${midIdx}` },
+  );
+  return {
+    medianPrice: priceRes.data?.[0]?.price != null ? Number(priceRes.data[0].price) : null,
+    newBuildSharePct: Math.round((newBuildCount / total) * 100),
+  };
+}
+
 // The four stat tiles mean different things depending on the view, so their
 // labels are set with the values. Overview: the whole register since 2010.
 // Filtered: whatever matches the active search/filters. Address: that single
@@ -232,8 +277,20 @@ Chart.defaults.animation = { duration: 450, easing: 'easeOutQuart' }; // subtle,
 
 const RESULT_LIMIT = 200;
 const RECENT_LIMIT = 50;
+const RECENT_PAGE_SIZE = 50;
+// Client-side ceiling on how many "Recent sales" rows infinite scroll will
+// auto-load. Not a backend cost concern — sales is indexed on sale_date, so
+// paging through it is cheap at any depth, and the anon key is already
+// publicly queryable that deep regardless. The real cost is client-side:
+// thousands of live <tr> elements visibly slow the page down over a long
+// scroll session, so this trades unlimited depth for a sane upper bound.
+const RECENT_HARD_CAP = 500;
 
 let quarterlyChart, districtChart, typeChart, rateChart;
+let recentScrollObserver = null;
+let recentOffset = 0;
+let recentExhausted = false;
+let recentLoadingMore = false;
 let districtOptions = [];
 let typeOptions = [];
 let addressMatches = [];
@@ -936,45 +993,46 @@ function setViewLoading(loading) {
   document.querySelector('.page').classList.toggle('view-loading', loading);
 }
 
+function buildTableRow(r, animationIndex) {
+  const tr = document.createElement('tr');
+  tr.style.animationDelay = `${Math.min(animationIndex, 12) * 8}ms`;
+
+  const dateTd = document.createElement('td');
+  dateTd.textContent = r.sale_date;
+  tr.appendChild(dateTd);
+
+  const addressTd = document.createElement('td');
+  addressTd.className = 'address-cell';
+  addressTd.textContent = r.address;
+  addressTd.title = 'View full sale history for this address';
+  addressTd.addEventListener('click', () => runAddressHistory(r.address));
+  tr.appendChild(addressTd);
+
+  const districtTd = document.createElement('td');
+  districtTd.textContent = r.postal_district || '—';
+  tr.appendChild(districtTd);
+
+  const eircodeTd = document.createElement('td');
+  eircodeTd.textContent = r.eircode || '—';
+  tr.appendChild(eircodeTd);
+
+  const typeTd = document.createElement('td');
+  typeTd.textContent = r.property_type ? propertyTypeLabel(r.property_type) : '—';
+  tr.appendChild(typeTd);
+
+  const priceTd = document.createElement('td');
+  priceTd.className = 'num';
+  priceTd.textContent = eur.format(r.price);
+  tr.appendChild(priceTd);
+
+  tr.appendChild(renderNotesCell(r));
+  return tr;
+}
+
 function renderTable(rows, cap, trueTotal) {
   const body = document.getElementById('table-body');
   body.replaceChildren();
-  rows.forEach((r, i) => {
-    const tr = document.createElement('tr');
-    tr.style.animationDelay = `${Math.min(i, 12) * 8}ms`;
-
-    const dateTd = document.createElement('td');
-    dateTd.textContent = r.sale_date;
-    tr.appendChild(dateTd);
-
-    const addressTd = document.createElement('td');
-    addressTd.className = 'address-cell';
-    addressTd.textContent = r.address;
-    addressTd.title = 'View full sale history for this address';
-    addressTd.addEventListener('click', () => runAddressHistory(r.address));
-    tr.appendChild(addressTd);
-
-    const districtTd = document.createElement('td');
-    districtTd.textContent = r.postal_district || '—';
-    tr.appendChild(districtTd);
-
-    const eircodeTd = document.createElement('td');
-    eircodeTd.textContent = r.eircode || '—';
-    tr.appendChild(eircodeTd);
-
-    const typeTd = document.createElement('td');
-    typeTd.textContent = r.property_type ? propertyTypeLabel(r.property_type) : '—';
-    tr.appendChild(typeTd);
-
-    const priceTd = document.createElement('td');
-    priceTd.className = 'num';
-    priceTd.textContent = eur.format(r.price);
-    tr.appendChild(priceTd);
-
-    tr.appendChild(renderNotesCell(r));
-
-    body.appendChild(tr);
-  });
+  rows.forEach((r, i) => body.appendChild(buildTableRow(r, i)));
   const note = document.getElementById('result-note');
   if (rows.length >= cap) {
     // trueTotal (from PostgREST's exact count, see pg()) is the real match
@@ -987,6 +1045,57 @@ function renderTable(rows, cap, trueTotal) {
   } else {
     note.textContent = `${rows.length} result${rows.length === 1 ? '' : 's'}`;
   }
+}
+
+function stopRecentInfiniteScroll() {
+  recentScrollObserver?.disconnect();
+  recentScrollObserver = null;
+}
+
+async function loadMoreRecent() {
+  if (recentLoadingMore || recentExhausted) return;
+  if (recentOffset >= RECENT_HARD_CAP) {
+    document.getElementById('result-note').textContent =
+      `Showing the first ${RECENT_HARD_CAP.toLocaleString()} sales — search or filter to see more.`;
+    stopRecentInfiniteScroll();
+    return;
+  }
+  recentLoadingMore = true;
+  const { data } = await pg('sales', {
+    select: 'sale_date,address,postal_district,eircode,property_type,price,size_description,vat_exclusive,not_full_market_price',
+    order: 'sale_date.desc',
+    limit: RECENT_PAGE_SIZE,
+    offset: recentOffset,
+  });
+  const rows = data || [];
+  const body = document.getElementById('table-body');
+  rows.forEach((r, i) => body.appendChild(buildTableRow(r, i)));
+  recentOffset += rows.length;
+  if (rows.length < RECENT_PAGE_SIZE) {
+    recentExhausted = true;
+    stopRecentInfiniteScroll();
+  }
+  recentLoadingMore = false;
+}
+
+// Infinite scroll for the unfiltered "Recent sales" table only — filtered/
+// address views already show their full server-computed match set up to
+// their own cap (RESULT_LIMIT) and don't need incremental loading. Called
+// fresh each time the default table renders, so returning to it later
+// starts over from the cached first 50 rather than carrying stale scroll
+// state from a previous visit.
+function setupRecentInfiniteScroll() {
+  stopRecentInfiniteScroll();
+  recentOffset = RECENT_LIMIT;
+  recentExhausted = false;
+  recentLoadingMore = false;
+  const sentinel = document.getElementById('table-scroll-sentinel');
+  if (!sentinel) return;
+  recentScrollObserver = new IntersectionObserver(
+    (entries) => { if (entries[0].isIntersecting) loadMoreRecent(); },
+    { root: document.querySelector('.table-scroll'), rootMargin: '200px' },
+  );
+  recentScrollObserver.observe(sentinel);
 }
 
 async function loadDefaultView() {
@@ -1013,7 +1122,12 @@ async function loadDefaultView() {
         order: 'sale_date.desc',
         limit: RECENT_LIMIT,
       }, { signal }),
-      getRateSeries(),
+      // Non-critical: the rate overlay is one chart among several, not core
+      // page data, so a failure here (network blip, an unrelated grant/RLS
+      // regression on mortgage_rates) must not fail the whole Promise.all and
+      // leave the page stuck in its loading state — degrade to an empty
+      // series (an empty rate-overlay chart) instead.
+      getRateSeries().catch((e) => { console.error('mortgage rate fetch failed', e); return new Map(); }),
     ]);
     if (requestId !== viewRequestId) return; // a newer view request has since started
     defaultViewCache = {
@@ -1033,14 +1147,37 @@ async function loadDefaultView() {
     // dashboard, so the first tile shows sales over the trailing 12 months
     // (the last four quarters) instead — a figure that means something now.
     // Fall back to the lifetime total only if the quarterly series is empty.
-    const trailingYear = quarterly
-      .slice(-4)
-      .reduce((acc, q) => acc + (q.sale_count || 0), 0);
+    const last4 = quarterly.slice(-4);
+    const trailingYear = last4.reduce((acc, q) => acc + (q.sale_count || 0), 0);
+    const cutoffDate = last4[0]?.quarter;
     document.getElementById('stat-total-label').textContent =
       trailingYear > 0 ? 'Sales past 12 months' : 'Sales since 2010';
     setStat('stat-total', (trailingYear > 0 ? trailingYear : summary.total_sales).toLocaleString());
-    setStat('stat-median', eur.format(summary.median_price));
-    setStat('stat-newbuild', `${newBuildShareFromCounts(type)}%`);
+
+    // Median price and new-build share: same trailing window as the tile
+    // above where there's enough recent data for it, rather than the
+    // all-time register — an all-time median blends 2010 prices in with
+    // 2026 ones and reads as "today's price" when it isn't. The label always
+    // states which one this ended up being, explicitly, every time.
+    const medianLabel = document.getElementById('stat-median-label');
+    const newbuildLabel = document.getElementById('stat-newbuild-label');
+    if (trailingYear > 0 && cutoffDate) {
+      medianLabel.textContent = 'Median price (past 12mo)';
+      newbuildLabel.textContent = 'New build share (past 12mo)';
+      // Not awaited: charts/table below don't depend on this, and it adds
+      // 3 lightweight requests (2 exact-count, 1 point-fetch) on top of the
+      // page's core data — no reason to delay the rest of the view on it.
+      trailingWindowStats(cutoffDate).then((trailing) => {
+        if (requestId !== viewRequestId) return; // superseded by a newer view request
+        setStat('stat-median', trailing.medianPrice != null ? eur.format(trailing.medianPrice) : '—');
+        setStat('stat-newbuild', `${trailing.newBuildSharePct}%`);
+      });
+    } else {
+      medianLabel.textContent = 'Median price (all-time)';
+      newbuildLabel.textContent = 'New build share (all-time)';
+      setStat('stat-median', eur.format(summary.median_price));
+      setStat('stat-newbuild', `${newBuildShareFromCounts(type)}%`);
+    }
     setStat('stat-latest', summary.latest_sale_date);
   }
 
@@ -1051,6 +1188,7 @@ async function loadDefaultView() {
   renderType(mergeTypeRows(type));
   renderRateOverlay(quarterly, rateSeries);
   renderTable(recent, RECENT_LIMIT);
+  setupRecentInfiniteScroll();
 
   districtOptions = district.map((d) => ({
     label: d.postal_district,
@@ -1082,6 +1220,31 @@ function populateFilterSelects() {
   typeSelect.value = currentType;
 }
 
+// districtSelect/typeSelect start with only the placeholder "All ..."
+// <option> — real per-value options are added exclusively by
+// populateFilterSelects() above, which loadDefaultView calls after its own
+// fetch resolves. Assigning a <select>'s .value to a string with no matching
+// <option> is a silent no-op per the HTML spec (selectedIndex stays -1,
+// .value reads back as ""), so a deep link or Back/Forward restore straight
+// into a filtered view — reachable without loadDefaultView ever having run —
+// would set districtSelect.value/typeSelect.value and have it silently
+// evaporate, dropping the filter with no error. Call this before assigning
+// either value whenever that ordering isn't already guaranteed.
+async function ensureFilterOptions() {
+  if (districtOptions.length) return; // already populated by a prior loadDefaultView
+  const [district, type] = await Promise.all([
+    pg('sales_by_district', { select: '*' }),
+    pg('sales_by_type', { select: '*' }),
+  ]);
+  districtOptions = (district.data || []).map((d) => ({
+    label: d.postal_district,
+    sale_count: d.sale_count,
+    synonyms: districtSynonyms(d.postal_district),
+  }));
+  typeOptions = buildTypeOptions(type.data || []);
+  populateFilterSelects();
+}
+
 // Stats + table for the address-history view (a single address is a bounded,
 // exact-equality result set, so everything derives from the rows themselves).
 //
@@ -1095,6 +1258,7 @@ function populateFilterSelects() {
 // matches (see runFilteredView).
 function applyResultSet(data, cap, trueTotal) {
   setStatLabels('address');
+  stopRecentInfiniteScroll(); // this table is now one address's own capped rows, not the incrementally-loaded default one
   renderTable(data, cap, trueTotal);
   document.getElementById('address-detail').hidden = true; // re-shown by renderAddressDetail when relevant
   document.getElementById('stats').classList.remove('is-loading'); // only loadDefaultView sets it; a deep link straight into an address view never would otherwise
@@ -1148,7 +1312,7 @@ function buildFilterHeading(term, district, type) {
   if (term) parts.push(`"${term}"`);
   if (district) parts.push(district);
   if (type) parts.push(type); // already a merged label ("New Build" / "Resale")
-  return parts.length ? `Filtered sales — ${parts.join(' · ')}` : 'Recent sales';
+  return parts.length ? `Filtered sales: ${parts.join(' · ')}` : 'Recent sales';
 }
 
 // Renders a filtered view's stats + charts from a sales_stats RPC result
@@ -1161,7 +1325,11 @@ function applyStatsPayload(agg, rateSeries) {
   document.getElementById('charts-cap-note').hidden = true; // stats/charts cover all matches, not the page
   document.getElementById('stats').classList.remove('is-loading'); // only loadDefaultView sets it; a deep link straight into a filtered view never would otherwise
   setStat('stat-total', agg.total.toLocaleString());
-  setStat('stat-median', eur.format(agg.median_price));
+  // percentile_cont over zero matching rows comes back as SQL NULL — Intl's
+  // format() coerces that to 0 and shows "€0" as if it were a real (very
+  // cheap) median, rather than "no data". Same null-guard pattern already
+  // used for latest_sale_date just below.
+  setStat('stat-median', agg.median_price != null ? eur.format(agg.median_price) : '—');
   setStat('stat-newbuild', `${newBuildShareFromCounts(agg.types)}%`);
   setStat('stat-latest', agg.latest_sale_date || '—');
   setChartsMode('aggregate');
@@ -1214,7 +1382,7 @@ async function runFilteredView() {
       },
       { signal: viewAbort.signal },
     ),
-    getRateSeries(),
+    getRateSeries().catch((e) => { console.error('mortgage rate fetch failed', e); return new Map(); }),
   ]);
   if (requestId !== viewRequestId) return; // superseded by a newer view request
   if (error) {
@@ -1230,6 +1398,7 @@ async function runFilteredView() {
   }
 
   document.getElementById('table-heading').textContent = buildFilterHeading(term, district, type);
+  stopRecentInfiniteScroll(); // this table is now sales_stats' own capped rows, not the incrementally-loaded default one
   renderTable(agg.rows, RESULT_LIMIT, agg.total);
   applyStatsPayload(agg, rateSeries);
   setViewLoading(false); // clears the initial-load dim if this search overtook it
@@ -1360,6 +1529,7 @@ window.addEventListener('popstate', async () => {
     if (view.type === 'address') {
       await runAddressHistory(view.address);
     } else if (view.type === 'filtered') {
+      await ensureFilterOptions();
       applyFilteredControls(view);
       await runFilteredView();
     } else {
@@ -1548,7 +1718,16 @@ function selectSuggestion(item) {
   }
 }
 
+// Every call site here means "this dropdown must not be showing" — so this
+// also cancels fetchAddressSuggestions' pending debounce timer (a still-
+// scheduled lookup from a keystroke just before the dismiss would otherwise
+// fire ~120ms later and silently reopen the dropdown over whatever the user
+// navigated to) and bumps suggestionRequestId to discard a request that's
+// already in flight and past cancellation, so its late response can't
+// reopen it either.
 function hideSuggestions() {
+  fetchAddressSuggestions.cancel();
+  ++suggestionRequestId;
   suggestionsEl.hidden = true;
   suggestionsEl.replaceChildren();
   activeSuggestionIndex = -1;

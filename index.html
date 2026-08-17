@@ -12,12 +12,18 @@
 <body>
   <div class="page">
     <header class="topbar">
-      <h1 id="home-link" tabindex="0" role="button" title="Back to overview">Dublin Property Prices</h1>
-      <p class="subtitle">
-        Every registered residential sale in Dublin since 2010, sourced from the
-        <a href="https://www.propertypriceregister.ie" target="_blank" rel="noopener">PSRA Residential Property Price Register</a>.
-        Refreshed weekly — next refresh in <span id="refresh-countdown">—</span>.
-      </p>
+      <div class="topbar-main">
+        <h1 id="home-link" tabindex="0" role="button" title="Back to overview">Dublin Property Prices</h1>
+        <p class="subtitle">
+          Every registered residential sale in Dublin since 2010, sourced from the
+          <a href="https://www.propertypriceregister.ie" target="_blank" rel="noopener">PSRA Residential Property Price Register</a>,
+          with mortgage rate data from the
+          <a href="https://opendata.centralbank.ie/dataset/retail-interest-rates-mortgage-rates" target="_blank" rel="noopener">Central Bank of Ireland</a>
+          and rent data from the
+          <a href="https://data.cso.ie" target="_blank" rel="noopener">CSO</a> for context.
+        </p>
+      </div>
+      <p class="refresh-status">Refreshed weekly. Next refresh in <span id="refresh-countdown">—</span>.</p>
     </header>
 
     <div class="filters">
@@ -68,7 +74,7 @@
       </div>
     </section>
 
-    <p id="charts-empty-note" class="table-hint" hidden>Only one recorded sale for this address — nothing to chart.</p>
+    <p id="charts-empty-note" class="table-hint" hidden>Only one recorded sale for this address, nothing to chart.</p>
     <p id="charts-cap-note" class="table-hint" hidden></p>
     <section class="charts-grid" id="charts-grid">
       <div class="chart-card" id="card-quarterly">
@@ -91,8 +97,7 @@
 
     <section class="chart-card map-card" id="card-map">
       <div class="map-card-head">
-        <h2>Median price by postal district — map</h2>
-        <span class="table-hint">Click a district to filter</span>
+        <h2>Median price by postal district: map</h2>
       </div>
       <div class="map-wrap" id="map-wrap">
         <svg id="map-svg" role="img" aria-label="Choropleth map of Dublin postal districts coloured by median sale price"></svg>
@@ -133,6 +138,7 @@
           </thead>
           <tbody id="table-body"></tbody>
         </table>
+        <div id="table-scroll-sentinel"></div>
       </div>
     </section>
 

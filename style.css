@@ -17,6 +17,10 @@
   --scale-low: #1e3a5c;
   --scale-high: #5fa8f5;
   --scale-no-data: var(--gridline);
+
+  /* Darker and less saturated than --scale-low so Dublin Bay reads as water,
+     not as "the cheapest district" on the same price ramp. */
+  --map-sea: #0e2233;
 }
 
 * {
@@ -64,6 +68,14 @@ a {
   color: var(--series-1);
 }
 
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
 .topbar h1 {
   font-size: 28px;
   font-weight: 700;
@@ -85,8 +97,19 @@ a {
 
 .subtitle {
   color: var(--text-secondary);
-  margin: 0 0 28px;
+  margin: 0;
   max-width: 70ch;
+}
+
+.topbar-main {
+  margin-bottom: 28px;
+}
+
+.refresh-status {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin: 4px 0 28px;
+  flex: none;
 }
 
 #refresh-countdown {
@@ -362,12 +385,22 @@ a {
   opacity: 0.5;
 }
 
+/* Two explicit columns, each holding a related pair stacked top/bottom:
+   quarterly price + the rate-overlay chart share a time-series x-axis on the
+   left, district + property-type price breakdowns pair on the right — rather
+   than auto-fit's four-in-a-row-then-one-orphaned-below layout. Placement is
+   by id (below) so it doesn't depend on DOM order. */
 .charts-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
   margin-bottom: 24px;
 }
+
+#card-quarterly { grid-column: 1; grid-row: 1; }
+#card-rate      { grid-column: 1; grid-row: 2; }
+#card-district  { grid-column: 2; grid-row: 1; }
+#card-type      { grid-column: 2; grid-row: 2; }
 
 .chart-card {
   background: var(--surface);
@@ -387,7 +420,7 @@ a {
 }
 
 .chart-card canvas {
-  max-height: 260px;
+  max-height: 380px;
 }
 
 .map-card {
@@ -600,12 +633,24 @@ td.notes-cell {
 
 .table-scroll {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 400px; /* roughly 10 data rows + header before it scrolls */
+}
+
+#table-scroll-sentinel {
+  height: 1px;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
 }
 
 th,
@@ -672,12 +717,34 @@ tbody tr:hover {
     grid-template-columns: 1fr;
   }
 
+  /* The desktop two-column pairing (see .charts-grid above) would otherwise
+     force an implicit second column here, since grid-column: 2 doesn't just
+     disappear when only one explicit column is defined — reset to natural
+     DOM-order stacking instead. */
+  #card-quarterly,
+  #card-rate,
+  #card-district,
+  #card-type {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
   .chart-card canvas {
     max-height: 220px;
   }
 
   .stats {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* table's own `width: 100%` (see base rule below) meant it always matched
+     the narrow viewport exactly, so it never actually overflowed to trigger
+     .table-scroll's overflow-x — every column just got squeezed instead,
+     clipping long addresses with no ellipsis and no way to see the rest.
+     A min-width lets it overflow for real, so the scroll container does its
+     job and the full row stays readable by scrolling sideways. */
+  table {
+    min-width: 640px;
   }
 
   .filters {

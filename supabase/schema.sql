@@ -202,7 +202,12 @@ begin
   if p_types is not null and p_types <> '' then
     conds := array_append(conds, format('s.property_type = any(string_to_array(%L, ''|''))', p_types));
   end if;
-  if not p_include_non_market then
+  -- coalesce, not a bare `not p_include_non_market`: Postgres's IF treats a
+  -- NULL condition the same as false (branch skipped), so `not NULL` would
+  -- silently skip the exclusion instead of applying the documented "null
+  -- means inactive/default" behaviour every other filter here follows —
+  -- non-market sales would leak into what's meant to be the clean default.
+  if not coalesce(p_include_non_market, false) then
     conds := array_append(conds, 'not s.not_full_market_price');
   end if;
 
