@@ -57,7 +57,7 @@ const eurCompact = new Intl.NumberFormat('en-IE', {
 });
 const quarterFmt = (isoDate) => {
   const d = new Date(isoDate);
-  return `${d.getUTCFullYear()} Q${Math.floor(d.getUTCMonth() / 3) + 1}`;
+  return `${d.getUTCFullYear()}-Q${Math.floor(d.getUTCMonth() / 3) + 1}`;
 };
 
 // Matches Postgres's date_trunc('quarter', sale_date): first day of the
@@ -227,9 +227,15 @@ function setStatLabels(mode) {
     labels.newbuild.textContent = 'Estimated value today';
     labels.latest.textContent = 'Latest sale recorded';
   } else if (mode === 'filtered') {
-    labels.total.textContent = 'Matches';
-    labels.median.textContent = 'Median price';
-    labels.newbuild.textContent = 'New build share';
+    // Explicit "(all-time, filtered)" rather than bare "Median price" —
+    // these are the same four boxes the default view uses for a rolling
+    // past-12-months figure (see loadDefaultView), and silently swapping
+    // what a box means without saying so is exactly the confusing part;
+    // every state now states its own timeframe outright instead of relying
+    // on the reader to remember what it said a moment ago.
+    labels.total.textContent = 'Matches (all-time, filtered)';
+    labels.median.textContent = 'Median price (all-time, filtered)';
+    labels.newbuild.textContent = 'New build share (all-time, filtered)';
     labels.latest.textContent = 'Latest sale recorded';
   } else {
     labels.total.textContent = 'Sales since 2010';
