@@ -388,6 +388,25 @@ function districtLabelFromKey(key) {
   return suffix.endsWith('W') ? `Dublin ${suffix}` : `Dublin ${parseInt(suffix, 10)}`;
 }
 
+// X-axis tick config for quarter-labelled charts: shows just the year at
+// each year's first quarter rather than every "YYYY-Qn" label, which is
+// both cramped and repeats the year four times over. The full quarter is
+// still what data.labels holds underneath, so Chart.js's default tooltip
+// title (resolved from that, not from these ticks) still shows the exact
+// quarter on hover — only the axis itself gets thinned. autoSkip: false so
+// Chart.js's own thinning can't drop the specific index a year label needs
+// to land on before this callback ever sees it.
+const YEAR_ONLY_X_TICKS = {
+  autoSkip: false,
+  color: palette.textMuted,
+  callback(value, index) {
+    const label = this.getLabelForValue(value);
+    const year = label.slice(0, 4);
+    const prevYear = index > 0 ? this.getLabelForValue(value - 1).slice(0, 4) : null;
+    return year !== prevYear ? year : '';
+  },
+};
+
 function baseScales(extra = {}) {
   return {
     x: {
@@ -472,7 +491,7 @@ function renderQuarterly(rows) {
           callbacks: { label: (ctx) => eur.format(ctx.parsed.y) },
         },
       },
-      scales: baseScales({ x: { ticks: { maxTicksLimit: 10, color: palette.textMuted } } }),
+      scales: baseScales({ x: { ticks: YEAR_ONLY_X_TICKS } }),
     },
   });
 }
@@ -805,7 +824,7 @@ function renderRateOverlay(quarterlyRows, rateSeries) {
         x: {
           grid: { color: palette.gridline, display: false },
           border: { color: palette.baseline },
-          ticks: { color: palette.textMuted, maxTicksLimit: 10 },
+          ticks: YEAR_ONLY_X_TICKS,
         },
         y: {
           position: 'left',
@@ -937,11 +956,15 @@ async function loadRentIndexTable() {
     tr.appendChild(quarterTd);
 
     const districtTd = document.createElement('td');
-    // 'Dublin' in this table is the county-wide rollup (see
+    // 'Dublin' in this table is the rollup across every district (see
     // supabase/schema.sql's rent_index comment), not a real postal
     // district — sitting next to "Dublin 1", "Dublin 2" etc. it reads as
     // one more specific place rather than the aggregate it actually is.
-    districtTd.textContent = r.district === 'Dublin' ? 'All Dublin (county-wide)' : r.district;
+    // "county-wide" was tried first and dropped: it echoes "Co. Dublin",
+    // a real but completely different bucket on the sales side of this
+    // site (districts outside the 22 core areas), so it added confusion
+    // instead of removing it.
+    districtTd.textContent = r.district === 'Dublin' ? 'Dublin (all districts)' : r.district;
     tr.appendChild(districtTd);
 
     const rentTd = document.createElement('td');
@@ -994,7 +1017,7 @@ function renderRentChart(dublinWideRows) {
           callbacks: { label: (ctx) => eur.format(ctx.parsed.y) },
         },
       },
-      scales: baseScales({ x: { ticks: { maxTicksLimit: 10, color: palette.textMuted } } }),
+      scales: baseScales({ x: { ticks: YEAR_ONLY_X_TICKS } }),
     },
   });
 }
