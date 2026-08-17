@@ -195,12 +195,44 @@
       </p>
     </section>
 
+    <section class="finding">
+      <p class="finding-label">Finding 4</p>
+      <h2>Controlling for district and year, the "new-build premium" mostly disappears, which confirms Finding 3 rather than contradicting it</h2>
+      <p>
+        Finding 3's premiums are raw, within-district comparisons. A different question: if you pool every
+        district together and ask "does new-build carry a premium once you already know which district and
+        which year", the answer is a modest +1.2%, nowhere near the +83% seen in Dublin 1 alone. That's the
+        expected result, not a contradiction: it confirms the premium is concentrated in specific districts
+        rather than being a general "new costs more" effect across the city. Averaging over 22 very different
+        districts dilutes a large, real, local effect into a small pooled one.
+      </p>
+      <p>
+        This came from a straightforward hedonic regression (log price on district, new-build/resale, and
+        year, fit on a 15,000-row sample spanning 2015&ndash;2026) built specifically to sanity-check Finding
+        3, not to replace it. It also gives an independent read on price growth: controlling for district and
+        new-build/resale mix, prices rose about 5.5% a year over that window, somewhat faster than the
+        roughly 3.5%/year the raw 2010&ndash;2025 city-wide median implies, consistent with growth having
+        accelerated in the more recent part of that range.
+      </p>
+      <p class="caveat">
+        Caveat: this model explains about 23% of price variation (R&sup2; &asymp; 0.23), which is honestly
+        modest, most of what determines a home's price (size, condition, exact position within a district) isn't
+        in this data at row level, only district, type, and year are. A first pass on the full 2010&ndash;2026
+        register actually produced a small NEGATIVE new-build coefficient, which turned out to be a real but
+        different finding: new-builds sold at a discount to resale in 2010&ndash;2012 (likely distressed,
+        unsold post-crash stock), then flipped to a premium from 2016 on. A single coefficient across both
+        regimes averages two opposite effects into a misleading number, so this analysis is deliberately
+        restricted to 2015 onward, the stable modern regime, rather than reporting the pooled figure.
+      </p>
+    </section>
+
     <section class="methodology">
       <h2>How this was put together</h2>
       <ul>
         <li>All figures computed live from the same Supabase-backed data as the <a href="index.html">dashboard</a>, via <code>analysis/generate-report.mjs</code>, not hand-picked from a spreadsheet.</li>
         <li>Sale prices: PSRA Residential Property Price Register, full-market-price sales only (gifts and part-transfers excluded, matching the dashboard's default view).</li>
         <li>Rent: RTB Rent Index via the CSO.</li>
+        <li>Finding 4's regression: <code>analysis/regression.mjs</code>, ordinary least squares via the normal equations (no external stats library), self-tested against a synthetic dataset with a known exact answer before running on real data.</li>
         <li>Where a figure is an approximation (percentiles, growth rates, combined medians), that's stated in the finding itself, not hidden in a footnote.</li>
       </ul>
     </section>

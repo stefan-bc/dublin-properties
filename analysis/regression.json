@@ -1,0 +1,100 @@
+{
+  "generated_at": "2026-08-17T10:45:02.183Z",
+  "sample_start_year": 2015,
+  "sample_size": 15000,
+  "full_population_size": 194976,
+  "r_squared": 0.22900277553597892,
+  "intercept_price_baseline_co_dublin_2015_resale": 308233.12518635945,
+  "year_effect_pct_per_year": 5.534355575262184,
+  "new_build_premium_pct": 1.2358579058083352,
+  "district_effects_pct_vs_co_dublin": [
+    {
+      "district": "Dublin 6",
+      "pct_vs_co_dublin": 57.98265298813512
+    },
+    {
+      "district": "Dublin 4",
+      "pct_vs_co_dublin": 56.74510945878484
+    },
+    {
+      "district": "Dublin 14",
+      "pct_vs_co_dublin": 39.38802335100926
+    },
+    {
+      "district": "Dublin 6W",
+      "pct_vs_co_dublin": 38.05035724867789
+    },
+    {
+      "district": "Dublin 16",
+      "pct_vs_co_dublin": 21.988762579652498
+    },
+    {
+      "district": "Dublin 18",
+      "pct_vs_co_dublin": 19.929182087026987
+    },
+    {
+      "district": "Dublin 2",
+      "pct_vs_co_dublin": 9.574633350772132
+    },
+    {
+      "district": "Dublin 3",
+      "pct_vs_co_dublin": 8.825804285379334
+    },
+    {
+      "district": "Dublin 5",
+      "pct_vs_co_dublin": -1.5486997547973225
+    },
+    {
+      "district": "Dublin 13",
+      "pct_vs_co_dublin": -2.2615799654659763
+    },
+    {
+      "district": "Dublin 9",
+      "pct_vs_co_dublin": -5.21622142923327
+    },
+    {
+      "district": "Dublin 20",
+      "pct_vs_co_dublin": -13.445956239676482
+    },
+    {
+      "district": "Dublin 12",
+      "pct_vs_co_dublin": -15.178481512282405
+    },
+    {
+      "district": "Dublin 7",
+      "pct_vs_co_dublin": -16.130818130231027
+    },
+    {
+      "district": "Dublin 15",
+      "pct_vs_co_dublin": -18.9708010067409
+    },
+    {
+      "district": "Dublin 8",
+      "pct_vs_co_dublin": -21.127736447406818
+    },
+    {
+      "district": "Dublin 24",
+      "pct_vs_co_dublin": -29.897989916725187
+    },
+    {
+      "district": "Dublin 17",
+      "pct_vs_co_dublin": -31.90713374820526
+    },
+    {
+      "district": "Dublin 1",
+      "pct_vs_co_dublin": -33.1124515149831
+    },
+    {
+      "district": "Dublin 11",
+      "pct_vs_co_dublin": -33.81327062208764
+    },
+    {
+      "district": "Dublin 22",
+      "pct_vs_co_dublin": -35.005468156369844
+    },
+    {
+      "district": "Dublin 10",
+      "pct_vs_co_dublin": -43.79288125394428
+    }
+  ]
+}
