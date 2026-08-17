@@ -18,9 +18,13 @@
   --scale-high: #5fa8f5;
   --scale-no-data: var(--gridline);
 
-  /* Darker and less saturated than --scale-low so Dublin Bay reads as water,
-     not as "the cheapest district" on the same price ramp. */
-  --map-sea: #0e2233;
+  /* Neutral greys, not blue: a navy sea sat too close in hue to the
+     district price scale (both blue), reading as more colour-coded data
+     rather than "this is water". Two close shades, not one flat tone,
+     so the coastline is still visible — a completely flat grey would
+     lose the recognisable Dublin Bay shape entirely. */
+  --map-sea: #383835;
+  --map-land: #4a4a47;
 }
 
 * {
@@ -474,7 +478,7 @@ a {
 }
 
 .land-path {
-  fill: var(--surface);
+  fill: var(--map-land);
   stroke: none;
 }
 
