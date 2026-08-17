@@ -680,6 +680,21 @@ function renderMap(rows) {
   svg.setAttribute('viewBox', `0 0 ${maxX - minX} ${maxY - minY}`);
   svg.replaceChildren();
 
+  // Real land geometry (see dublin-land.js) as a background layer, drawn
+  // before the districts. The SVG's own background is the sea colour (set
+  // in CSS), so this is what makes the bay and any gaps between mapped
+  // districts read as real Dublin geography instead of an unexplained
+  // void — the earlier attempt at this painted the whole bounding
+  // rectangle blue, which wrongly coloured real inland areas as sea too;
+  // this uses an actual land polygon instead, so only genuine water reads
+  // as water.
+  const landPathData = renderMap.landPathData ?? (renderMap.landPathData = districtPathData(DUBLIN_LAND_POLYS, bbox));
+  const landPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  landPath.setAttribute('d', landPathData);
+  landPath.setAttribute('fill-rule', 'evenodd');
+  landPath.setAttribute('class', 'land-path');
+  svg.appendChild(landPath);
+
   // District geometry never changes — compute each path's `d` string once
   // instead of re-serialising every polygon on every search re-render.
   const pathDataCache = renderMap.pathDataCache ?? (renderMap.pathDataCache = {});

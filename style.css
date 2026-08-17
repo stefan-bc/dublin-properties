@@ -101,6 +101,12 @@ a {
   max-width: 70ch;
 }
 
+.findings-link {
+  display: block;
+  margin-top: 10px;
+  font-weight: 600;
+}
+
 .topbar-main {
   margin-bottom: 28px;
 }
@@ -463,6 +469,13 @@ a {
   display: block;
   width: 100%;
   height: auto;
+  background: var(--map-sea);
+  border-radius: 6px;
+}
+
+.land-path {
+  fill: var(--surface);
+  stroke: none;
 }
 
 .district-path {

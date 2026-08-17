@@ -19,12 +19,13 @@ export default [
         SUPABASE_URL: 'readonly',
         SUPABASE_ANON_KEY: 'readonly',
         DUBLIN_DISTRICT_GEOMETRY: 'readonly',
+        DUBLIN_LAND_POLYS: 'readonly',
       },
     },
   },
   {
     // Classic <script>s that exist only to declare the globals above.
-    files: ['config.js', 'dublin-districts.js'],
+    files: ['config.js', 'dublin-districts.js', 'dublin-land.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'script',
