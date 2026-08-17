@@ -85,33 +85,28 @@
         <h2>Median price by district</h2>
         <canvas id="chart-district" role="img" aria-label="Bar chart of median sale price by Dublin postal district"></canvas>
       </div>
-      <div class="chart-card" id="card-type">
-        <h2>Median price by property type</h2>
-        <canvas id="chart-type" role="img" aria-label="Bar chart of median sale price by property type"></canvas>
-      </div>
       <div class="chart-card" id="card-rate">
         <h2>Sales volume vs mortgage rate</h2>
         <canvas id="chart-rate" role="img" aria-label="Line chart comparing quarterly sales volume against the PDH mortgage new-business rate"></canvas>
       </div>
-    </section>
-
-    <section class="chart-card map-card" id="card-map">
-      <div class="map-card-head">
-        <h2>Median price by district: map</h2>
+      <div class="chart-card map-card" id="card-map">
+        <div class="map-card-head">
+          <h2>Median price by district: map</h2>
+        </div>
+        <div class="map-wrap" id="map-wrap">
+          <svg id="map-svg" role="img" aria-label="Choropleth map of Dublin postal districts coloured by median sale price"></svg>
+          <div id="map-tooltip" class="map-tooltip" hidden></div>
+        </div>
+        <div class="map-legend">
+          <span id="map-legend-low" class="map-legend-value">—</span>
+          <span class="map-legend-bar"></span>
+          <span id="map-legend-high" class="map-legend-value">—</span>
+        </div>
+        <p id="map-co-dublin-note" class="table-hint map-note" hidden></p>
+        <p class="table-hint map-source">
+          District boundaries: <a href="https://zenodo.org/records/4589220" target="_blank" rel="noopener">Dublin Postcode Boundaries, autoaddress.ie</a> (CC BY 4.0).
+        </p>
       </div>
-      <div class="map-wrap" id="map-wrap">
-        <svg id="map-svg" role="img" aria-label="Choropleth map of Dublin postal districts coloured by median sale price"></svg>
-        <div id="map-tooltip" class="map-tooltip" hidden></div>
-      </div>
-      <div class="map-legend">
-        <span id="map-legend-low" class="map-legend-value">—</span>
-        <span class="map-legend-bar"></span>
-        <span id="map-legend-high" class="map-legend-value">—</span>
-      </div>
-      <p id="map-co-dublin-note" class="table-hint map-note" hidden></p>
-      <p class="table-hint map-source">
-        District boundaries: <a href="https://zenodo.org/records/4589220" target="_blank" rel="noopener">Dublin Postcode Boundaries, autoaddress.ie</a> (CC BY 4.0).
-      </p>
     </section>
 
     <section class="table-card">

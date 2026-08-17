@@ -122,26 +122,6 @@ function propertyTypeLabel(raw) {
   return PROPERTY_TYPE_LABELS[raw] || raw;
 }
 
-// Groups aggregate-view rows (raw property_type, one row per source string)
-// into the merged English labels above. The median is a count-weighted mean
-// of the sub-medians — not a true recomputed median, but with the Irish-
-// language variants at <0.1% of rows the difference is immaterial, and this
-// only runs against ~4 pre-aggregated rows, not the full dataset.
-function mergeTypeRows(rows) {
-  const byLabel = new Map();
-  for (const r of rows) {
-    const label = propertyTypeLabel(r.property_type);
-    if (!byLabel.has(label)) byLabel.set(label, { property_type: label, totalPrice: 0, sale_count: 0 });
-    const entry = byLabel.get(label);
-    entry.totalPrice += r.median_price * r.sale_count;
-    entry.sale_count += r.sale_count;
-  }
-  return [...byLabel.values()].map((e) => ({
-    property_type: e.property_type,
-    median_price: e.totalPrice / e.sale_count,
-  }));
-}
-
 // Same merge, but keeps the underlying raw source strings per label so the
 // property-type <select> can filter on all of them at once (see runFilteredView).
 function buildTypeOptions(rows) {
@@ -295,7 +275,7 @@ const RESULT_LIMIT = 200;
 const RECENT_LIMIT = 50;
 const RECENT_PAGE_SIZE = 50;
 
-let quarterlyChart, districtChart, typeChart, rateChart, rentChart;
+let quarterlyChart, districtChart, rateChart, rentChart;
 let recentScrollObserver = null;
 let recentOffset = 0;
 let recentExhausted = false;
@@ -684,37 +664,6 @@ function renderMap(rows) {
   }
 }
 
-function renderType(rows) {
-  const ctx = document.getElementById('chart-type');
-  typeChart = upsertChart(typeChart, ctx, {
-    type: 'bar',
-    data: {
-      labels: rows.map((r) => propertyTypeLabel(r.property_type)),
-      datasets: [
-        {
-          data: rows.map((r) => Math.round(r.median_price)),
-          backgroundColor: [palette.series1, palette.series2],
-          borderRadius: 4,
-          maxBarThickness: 48,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          ...tooltipBase(),
-          callbacks: { label: (ctx) => eur.format(ctx.parsed.y) },
-        },
-      },
-      scales: baseScales(),
-    },
-  });
-}
-
 // Fetched once and shared by both loadDefaultView and runFilteredView — it's
 // a national rate, not a per-view value, and both paths need it (including
 // loadInitialView's deep-link case, which can reach runFilteredView directly
@@ -845,14 +794,13 @@ function renderRateOverlay(quarterlyRows, rateSeries) {
   });
 }
 
-// A single address is always exactly one district and one property type, so
-// those two charts are structurally meaningless there — hide them rather than
-// show a one-bar "chart" that isn't telling the reader anything. The quarterly
+// A single address is always exactly one district, so the district chart
+// (and map) is structurally meaningless there — hide it rather than show a
+// one-bar "chart" that isn't telling the reader anything. The quarterly
 // chart is repurposed into that address's own raw price history (or hidden
 // too, honestly, if there's only one sale to plot).
 function setChartsMode(mode, rows = []) {
   const districtCard = document.getElementById('card-district');
-  const typeCard = document.getElementById('card-type');
   const mapCard = document.getElementById('card-map');
   const rateCard = document.getElementById('card-rate');
   const quarterlyCard = document.getElementById('card-quarterly');
@@ -861,7 +809,6 @@ function setChartsMode(mode, rows = []) {
 
   if (mode === 'address') {
     districtCard.hidden = true;
-    typeCard.hidden = true;
     mapCard.hidden = true; // same reasoning as the district bar chart — one address is one district
     rateCard.hidden = true; // the national mortgage rate isn't meaningful next to one address's own history
     quarterlyHeading.textContent = 'Price history for this address';
@@ -875,7 +822,6 @@ function setChartsMode(mode, rows = []) {
     }
   } else {
     districtCard.hidden = false;
-    typeCard.hidden = false;
     mapCard.hidden = false;
     rateCard.hidden = false;
     quarterlyCard.hidden = false;
@@ -1424,7 +1370,6 @@ async function loadDefaultView() {
   renderQuarterly(quarterly);
   renderDistrict(district);
   renderMap(district);
-  renderType(mergeTypeRows(type));
   renderRateOverlay(quarterly, rateSeries);
   renderTable(recent, RECENT_LIMIT);
   setupRecentInfiniteScroll(
@@ -1578,7 +1523,6 @@ function applyStatsPayload(agg, rateSeries) {
   renderQuarterly(agg.quarterly);
   renderDistrict(agg.districts);
   renderMap(agg.districts);
-  renderType(mergeTypeRows(agg.types));
   renderRateOverlay(agg.quarterly, rateSeries);
 }
 

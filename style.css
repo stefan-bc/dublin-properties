@@ -391,9 +391,9 @@ a {
 
 /* Two explicit columns, each holding a related pair stacked top/bottom:
    quarterly price + the rate-overlay chart share a time-series x-axis on the
-   left, district + property-type price breakdowns pair on the right — rather
-   than auto-fit's four-in-a-row-then-one-orphaned-below layout. Placement is
-   by id (below) so it doesn't depend on DOM order. */
+   left, the district bar chart + district map pair on the right (same data,
+   two views of it) — rather than auto-fit's four-in-a-row layout. Placement
+   is by id (below) so it doesn't depend on DOM order. */
 .charts-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -404,7 +404,7 @@ a {
 #card-quarterly { grid-column: 1; grid-row: 1; }
 #card-rate      { grid-column: 1; grid-row: 2; }
 #card-district  { grid-column: 2; grid-row: 1; }
-#card-type      { grid-column: 2; grid-row: 2; }
+#card-map       { grid-column: 2; grid-row: 2; }
 
 .chart-card {
   background: var(--surface);
@@ -436,10 +436,6 @@ a {
 
 .chart-card canvas {
   max-height: 380px;
-}
-
-.map-card {
-  margin-bottom: 24px;
 }
 
 .map-card-head {
@@ -771,7 +767,7 @@ tbody tr:hover {
   #card-quarterly,
   #card-rate,
   #card-district,
-  #card-type {
+  #card-map {
     grid-column: auto;
     grid-row: auto;
   }
