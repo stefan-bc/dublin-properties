@@ -152,6 +152,38 @@ const NEW_BUILD_RAW_TYPES = Object.entries(PROPERTY_TYPE_LABELS)
   .filter(([, label]) => label === 'New Build')
   .map(([raw]) => raw);
 
+function medianOfValues(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+// Per-district median price over the same trailing window as the stat
+// tiles, built from district_quarterly (already granted to anon — it also
+// backs the address view's "Estimated value today" tile) rather than one
+// live query per district: a per-district point-fetch percentile, done 22
+// times, isn't worth it just for a chart. Combines each district's own
+// quarterly medians (median-of-medians, not a full recompute over the raw
+// rows) — the same approximation loadDefaultView's annualMedian already
+// uses elsewhere, acceptable here for the same reason: it's feeding a
+// chart, not a headline figure, and the source medians it's combining are
+// each already a real percentile over that district's actual sales.
+function recentDistrictMedians(districtQuarterlyRows, sinceDate) {
+  const byDistrict = new Map();
+  for (const r of districtQuarterlyRows) {
+    if (r.quarter < sinceDate) continue;
+    const entry = byDistrict.get(r.postal_district) || { postal_district: r.postal_district, prices: [], sale_count: 0 };
+    entry.prices.push(Number(r.median_price));
+    entry.sale_count += r.sale_count;
+    byDistrict.set(r.postal_district, entry);
+  }
+  return [...byDistrict.values()].map((e) => ({
+    postal_district: e.postal_district,
+    median_price: medianOfValues(e.prices),
+    sale_count: e.sale_count,
+  }));
+}
+
 // Median price and new-build share, computed live over the same trailing
 // window as the "Sales past 12 months" count tile, rather than the all-time
 // register (sales_summary/sales_by_type cover 2010-present). An all-time
@@ -214,12 +246,12 @@ function setStatLabels(mode) {
     // every state now states its own timeframe outright instead of relying
     // on the reader to remember what it said a moment ago.
     labels.total.textContent = 'Matches (all-time, filtered)';
-    labels.median.textContent = 'Median price (all-time, filtered)';
+    labels.median.textContent = 'Median buy price (all-time, filtered)';
     labels.newbuild.textContent = 'New build share (all-time, filtered)';
     labels.latest.textContent = 'Latest sale recorded';
   } else {
     labels.total.textContent = 'Sales since 2010';
-    labels.median.textContent = 'Median price';
+    labels.median.textContent = 'Median buy price';
     labels.newbuild.textContent = 'New build share';
     labels.latest.textContent = 'Latest sale recorded';
   }
@@ -826,7 +858,7 @@ function setChartsMode(mode, rows = []) {
     rateCard.hidden = false;
     quarterlyCard.hidden = false;
     emptyNote.hidden = true;
-    quarterlyHeading.textContent = 'Median price by quarter';
+    quarterlyHeading.textContent = 'Median buy price by quarter';
   }
 }
 
@@ -1297,10 +1329,11 @@ async function loadDefaultView() {
 
   if (!defaultViewCache) {
     const signal = viewAbort.signal;
-    const [summaryRes, quarterly, district, type, recent, rates] = await Promise.all([
+    const [summaryRes, quarterly, district, districtQuarterlyRes, type, recent, rates] = await Promise.all([
       pg('sales_summary', { select: '*' }, { signal }),
       pg('sales_quarterly', { select: '*' }, { signal }),
       pg('sales_by_district', { select: '*' }, { signal }),
+      pg('district_quarterly', { select: '*' }, { signal }),
       pg('sales_by_type', { select: '*' }, { signal }),
       pg('sales', {
         select: SALE_ROW_SELECT,
@@ -1319,22 +1352,25 @@ async function loadDefaultView() {
       summary: summaryRes.data?.[0],
       quarterly: quarterly.data || [],
       district: district.data || [],
+      districtQuarterly: districtQuarterlyRes.data || [],
       type: type.data || [],
       recent: recent.data || [],
       rateSeries: rates,
     };
   }
 
-  const { summary, quarterly, district, type, recent, rateSeries } = defaultViewCache;
+  const { summary, quarterly, district, districtQuarterly, type, recent, rateSeries } = defaultViewCache;
   setStatLabels('aggregate');
+  // The all-time register ("since 2010") is contextless next to a live
+  // dashboard, so the tiles and the district chart/map below all prefer the
+  // trailing 12 months (the last four quarters) instead — figures that mean
+  // something now. Fall back to all-time only if the quarterly series is
+  // empty. Computed unconditionally (not just inside `if (summary)`) since
+  // the district chart/map need it too.
+  const last4 = quarterly.slice(-4);
+  const trailingYear = last4.reduce((acc, q) => acc + (q.sale_count || 0), 0);
+  const cutoffDate = last4[0]?.quarter;
   if (summary) {
-    // The all-time total ("since 2010") is contextless next to a live
-    // dashboard, so the first tile shows sales over the trailing 12 months
-    // (the last four quarters) instead — a figure that means something now.
-    // Fall back to the lifetime total only if the quarterly series is empty.
-    const last4 = quarterly.slice(-4);
-    const trailingYear = last4.reduce((acc, q) => acc + (q.sale_count || 0), 0);
-    const cutoffDate = last4[0]?.quarter;
     document.getElementById('stat-total-label').textContent =
       trailingYear > 0 ? 'Sales past 12 months' : 'Sales since 2010';
     setStat('stat-total', (trailingYear > 0 ? trailingYear : summary.total_sales).toLocaleString());
@@ -1347,7 +1383,7 @@ async function loadDefaultView() {
     const medianLabel = document.getElementById('stat-median-label');
     const newbuildLabel = document.getElementById('stat-newbuild-label');
     if (trailingYear > 0 && cutoffDate) {
-      medianLabel.textContent = 'Median price (past 12mo)';
+      medianLabel.textContent = 'Median buy price (past 12mo)';
       newbuildLabel.textContent = 'New build share (past 12mo)';
       // Not awaited: charts/table below don't depend on this, and it adds
       // 3 lightweight requests (2 exact-count, 1 point-fetch) on top of the
@@ -1358,7 +1394,7 @@ async function loadDefaultView() {
         setStat('stat-newbuild', `${trailing.newBuildSharePct}%`);
       });
     } else {
-      medianLabel.textContent = 'Median price (all-time)';
+      medianLabel.textContent = 'Median buy price (all-time)';
       newbuildLabel.textContent = 'New build share (all-time)';
       setStat('stat-median', eur.format(summary.median_price));
       setStat('stat-newbuild', `${newBuildShareFromCounts(type)}%`);
@@ -1366,10 +1402,24 @@ async function loadDefaultView() {
     setStat('stat-latest', summary.latest_sale_date);
   }
 
+  // Same trailing-window preference as the stat tiles above: a district's
+  // all-time median blends 2010 prices in with 2026 ones, same problem as
+  // the headline median did. Falls back to the all-time district data only
+  // when there's no recent quarter to work from (matches the stat tiles'
+  // own fallback condition). Heading always states which one this is.
+  const districtHeading = document.getElementById('chart-district-heading');
+  const mapHeading = document.getElementById('chart-map-heading');
+  const chartDistrictData = trailingYear > 0 && cutoffDate
+    ? recentDistrictMedians(districtQuarterly, cutoffDate)
+    : district;
+  const districtHeadingSuffix = trailingYear > 0 && cutoffDate ? '(past 12mo)' : '(all-time)';
+  districtHeading.textContent = `Median buy price by district ${districtHeadingSuffix}`;
+  mapHeading.textContent = `Median buy price by district: map ${districtHeadingSuffix}`;
+
   setChartsMode('aggregate');
   renderQuarterly(quarterly);
-  renderDistrict(district);
-  renderMap(district);
+  renderDistrict(chartDistrictData);
+  renderMap(chartDistrictData);
   renderRateOverlay(quarterly, rateSeries);
   renderTable(recent, RECENT_LIMIT);
   setupRecentInfiniteScroll(
@@ -1519,6 +1569,12 @@ function applyStatsPayload(agg, rateSeries) {
   setStat('stat-median', agg.median_price != null ? eur.format(agg.median_price) : '—');
   setStat('stat-newbuild', `${newBuildShareFromCounts(agg.types)}%`);
   setStat('stat-latest', agg.latest_sale_date || '—');
+  // Same reasoning as setStatLabels' filtered branch: sales_stats has no
+  // date-range parameter, so a filtered district breakdown is always
+  // all-time — say so explicitly rather than leaving whatever the default
+  // view's "(past 12mo)" heading last said in place.
+  document.getElementById('chart-district-heading').textContent = 'Median buy price by district (all-time, filtered)';
+  document.getElementById('chart-map-heading').textContent = 'Median buy price by district: map (all-time, filtered)';
   setChartsMode('aggregate');
   renderQuarterly(agg.quarterly);
   renderDistrict(agg.districts);
