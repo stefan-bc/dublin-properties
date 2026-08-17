@@ -948,8 +948,10 @@ async function loadMortgageRatesTable() {
   });
 }
 
+const RENT_SOURCE_LABELS = { rtb_cso: 'RTB via CSO' };
+
 async function loadRentIndexTable() {
-  const rows = await fetchAllRows('rent_index', { select: 'quarter,district,avg_rent_eur', order: 'quarter.desc,district.asc' });
+  const rows = await fetchAllRows('rent_index', { select: 'quarter,district,avg_rent_eur,source', order: 'quarter.desc,district.asc' });
   const body = document.getElementById('rent-table-body');
   body.replaceChildren();
   rows.forEach((r, i) => {
@@ -976,6 +978,10 @@ async function loadRentIndexTable() {
     rentTd.className = 'num';
     rentTd.textContent = eur.format(r.avg_rent_eur);
     tr.appendChild(rentTd);
+
+    const sourceTd = document.createElement('td');
+    sourceTd.textContent = RENT_SOURCE_LABELS[r.source] || r.source;
+    tr.appendChild(sourceTd);
 
     body.appendChild(tr);
   });
