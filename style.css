@@ -276,7 +276,11 @@ a {
   color: var(--text-primary);
   font-family: inherit;
   font-size: 13px;
-  padding: 9px 10px;
+  padding: 9px 12px;
+  /* Extra right padding so the native <select> arrow (rendered by the
+     browser, right up against the box edge by default) doesn't sit flush
+     against the border. */
+  padding-right: 28px;
   transition: border-color 150ms ease;
   /* Fixed rather than content-sized: a <select>'s intrinsic width follows
      its widest <option>, and the real district/type lists (populated after
@@ -643,7 +647,14 @@ td.notes-cell {
 
 table {
   width: 100%;
-  border-collapse: collapse;
+  /* separate + zero spacing, not collapse: position: sticky on a <th> inside
+     a border-collapse: collapse table doesn't establish a reliable
+     containing block in most browsers, so the sticky header row overlaps
+     the body row scrolling underneath it instead of staying above it. Each
+     th/td already draws its own border-bottom below, so the visual result
+     is the same as collapse — just without the sticky bug. */
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 13px;
 }
 

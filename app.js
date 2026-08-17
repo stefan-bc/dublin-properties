@@ -398,6 +398,11 @@ function tooltipBase() {
     bodyColor: '#ffffff',
     padding: 10,
     boxPadding: 4,
+    // 'nearest' (not the default 'average') keeps the tooltip anchored to
+    // whichever point/bar is actually closest to the cursor, so it appears
+    // next to where you're hovering rather than at a position averaged
+    // across every active element.
+    position: 'nearest',
   };
 }
 
@@ -475,6 +480,10 @@ function renderDistrict(rows) {
       indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
+      // Chart.js bar charts default to intersect: true — hovering anywhere
+      // in a bar's row except the coloured bar itself shows nothing.
+      // 'index' + intersect: false makes the whole row hoverable instead.
+      interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -695,6 +704,7 @@ function renderType(rows) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -901,6 +911,7 @@ function renderAddressPriceChart(rows) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -1065,7 +1076,7 @@ async function loadMoreRecent() {
   if (recentLoadingMore || recentExhausted) return;
   if (recentOffset >= RECENT_HARD_CAP) {
     document.getElementById('result-note').textContent =
-      `Showing the first ${RECENT_HARD_CAP.toLocaleString()} sales — search or filter to see more.`;
+      `Showing the first ${RECENT_HARD_CAP.toLocaleString()} sales. Search or filter to see more.`;
     stopRecentInfiniteScroll();
     return;
   }
