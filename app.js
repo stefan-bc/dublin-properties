@@ -1155,14 +1155,20 @@ function stopRecentInfiniteScroll() {
 
 // Bounds the live DOM regardless of how far a user scrolls: once the table
 // grows past DOM_WINDOW_MAX rows, the oldest ones at the top are evicted
-// back down to DOM_WINDOW_TRIM_TO, and .table-scroll's own scrollTop is
-// nudged up by exactly the height removed so nothing visibly jumps — the
-// rows currently on screen don't move, only the ones already scrolled past
-// disappear. This is what makes uncapped scrolling in loadMoreRecent safe:
-// the DOM never grows past a few hundred rows no matter how many pages have
-// been fetched. Trade-off: scrolling back up past the evicted point shows a
-// gap rather than re-fetching those rows — one-directional windowing, not a
-// full bidirectional virtualised list.
+// back down to DOM_WINDOW_TRIM_TO. Compensates .table-scroll's scrollTop by
+// measuring exactly how far a surviving row (the one that becomes the new
+// first row) actually moves across the removal, rather than precomputing a
+// sum of the removed rows' heights — verified live that a precomputed sum
+// drifts from the real answer by a large, inconsistent margin (likely the
+// row-entrance animation or table layout reflow affecting
+// getBoundingClientRect at measurement time), while measuring the real
+// before/after delta of a row that isn't itself being touched is correct
+// by construction regardless of the cause. This is what makes uncapped
+// scrolling in loadMoreRecent safe: the DOM never grows past a few hundred
+// rows no matter how many pages have been fetched. Trade-off: scrolling
+// back up past the evicted point shows a gap rather than re-fetching those
+// rows — one-directional windowing, not a full bidirectional virtualised
+// list.
 const DOM_WINDOW_MAX = 300;
 const DOM_WINDOW_TRIM_TO = 200;
 
@@ -1170,13 +1176,13 @@ function trimTableWindow() {
   const body = document.getElementById('table-body');
   const toRemove = body.children.length - DOM_WINDOW_TRIM_TO;
   if (body.children.length <= DOM_WINDOW_MAX || toRemove <= 0) return;
-  let removedHeight = 0;
-  for (let i = 0; i < toRemove; i++) {
-    removedHeight += body.firstElementChild.getBoundingClientRect().height;
-    body.firstElementChild.remove();
-  }
   const scrollEl = document.querySelector('.table-scroll');
-  if (scrollEl) scrollEl.scrollTop -= removedHeight;
+  const anchorRow = body.children[toRemove]; // first row that survives the trim
+  const anchorTopBefore = anchorRow?.getBoundingClientRect().top;
+  for (let i = 0; i < toRemove; i++) body.firstElementChild.remove();
+  if (scrollEl && anchorRow && anchorTopBefore != null) {
+    scrollEl.scrollTop += anchorRow.getBoundingClientRect().top - anchorTopBefore;
+  }
 }
 
 // Client-side equivalent of sales_stats' own filter logic (see
@@ -1217,22 +1223,41 @@ function updateLoadedResultNote(loadedCount, exhausted) {
 // cheap at any depth, and the anon key is already publicly queryable that
 // deep regardless — trimTableWindow above is what keeps the actual DOM cost
 // bounded.
+//
+// try/finally matters here specifically: verified live that without it, a
+// single failed request (an HTTP error, or fetch() itself rejecting on a
+// network blip) leaves recentLoadingMore stuck true forever — the guard at
+// the top of this function then silently blocks every future scroll-
+// triggered load for the rest of the session, with no visible error. An
+// HTTP-error response (pg() returns data: null) is also distinguished from
+// a genuinely short final page, so a transient server error doesn't get
+// misread as "reached the end of the data" and permanently stop the
+// scroll-loader via recentExhausted.
 async function loadMoreRecent() {
   if (recentLoadingMore || recentExhausted || !tableFetchParams) return;
   recentLoadingMore = true;
-  const { data } = await pg('sales', tableFetchParams(recentOffset));
-  const rows = data || [];
-  const body = document.getElementById('table-body');
-  rows.forEach((r, i) => body.appendChild(buildTableRow(r, i)));
-  recentOffset += rows.length;
-  trimTableWindow();
-  const exhausted = rows.length < RECENT_PAGE_SIZE;
-  if (exhausted) {
-    recentExhausted = true;
-    stopRecentInfiniteScroll();
+  try {
+    const { data, error } = await pg('sales', tableFetchParams(recentOffset));
+    if (error) {
+      console.error('loadMoreRecent failed:', error);
+      return; // transient — leave recentExhausted false so a later scroll can retry
+    }
+    const rows = data || [];
+    const body = document.getElementById('table-body');
+    rows.forEach((r, i) => body.appendChild(buildTableRow(r, i)));
+    recentOffset += rows.length;
+    trimTableWindow();
+    const exhausted = rows.length < RECENT_PAGE_SIZE;
+    if (exhausted) {
+      recentExhausted = true;
+      stopRecentInfiniteScroll();
+    }
+    updateLoadedResultNote(recentOffset, exhausted);
+  } catch (e) {
+    console.error('loadMoreRecent failed:', e);
+  } finally {
+    recentLoadingMore = false;
   }
-  updateLoadedResultNote(recentOffset, exhausted);
-  recentLoadingMore = false;
 }
 
 // Infinite scroll shared by the unfiltered "Recent sales" table and a

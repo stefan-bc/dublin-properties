@@ -545,6 +545,22 @@ a {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 18px;
+  margin-bottom: 24px;
+}
+
+/* Two small side-by-side reference tables (mortgage rates, rent index) —
+   same treatment as .charts-grid. The grid itself carries the trailing
+   margin instead of its .table-card children (reset below), so the gap
+   before the footer isn't doubled. */
+.tables-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.tables-grid .table-card {
+  margin-bottom: 0;
 }
 
 .table-card h2 {
@@ -729,7 +745,8 @@ tbody tr:hover {
   /* CSS Grid tracks don't shrink below their minmax floor the way flex items
      wrap — at 340px minimum, three chart cards would force horizontal page
      overflow on any phone narrower than ~380px. One column below 640px. */
-  .charts-grid {
+  .charts-grid,
+  .tables-grid {
     grid-template-columns: 1fr;
   }
 
