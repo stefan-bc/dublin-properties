@@ -661,6 +661,11 @@ table {
 thead th {
   position: sticky;
   top: 0;
+  /* Without an explicit stacking order, sticky positioning is geometrically
+     correct but tbody rows (later in DOM order) still paint on top of it
+     once scrolled — verified via elementFromPoint() at the header's own
+     coordinates returning a body <td>, not the <th>, without this. */
+  z-index: 1;
   background: var(--surface);
 }
 
