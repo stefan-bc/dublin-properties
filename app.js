@@ -483,7 +483,12 @@ function renderDistrict(rows) {
       // Chart.js bar charts default to intersect: true — hovering anywhere
       // in a bar's row except the coloured bar itself shows nothing.
       // 'index' + intersect: false makes the whole row hoverable instead.
-      interaction: { mode: 'index', intersect: false },
+      // axis: 'y' is required here specifically: Chart.js's interaction axis
+      // defaults to 'x' regardless of indexAxis, so on this horizontal bar
+      // chart it would otherwise match the "index" by horizontal mouse
+      // position instead of which row you're actually over — causing the
+      // tooltip to jump to a seemingly random bar as the cursor moves.
+      interaction: { mode: 'index', intersect: false, axis: 'y' },
       plugins: {
         legend: { display: false },
         tooltip: {
