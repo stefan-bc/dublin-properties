@@ -1049,40 +1049,28 @@ function renderRentChart(dublinWideRows) {
 }
 
 let incomeChart;
-let incomeChartData = null; // cached after first load — { year, salePrice, medianEarnings, meanEarnings }[]
+let incomeChartData = null; // cached after first load — { year, medianEarnings, meanEarnings }[], annualised
 let incomeStatSelected = 'median'; // 'median' | 'mean', switched by the segmented control
 
-// Weekly earnings (Dublin-wide, annual, CSO) against annual median sale
-// price. Earnings only exist as an annual figure, unlike everything else
-// on this page — so the sale-price side is also annualised (median-of-
-// quarterly-medians, the same approximation loadDefaultView's annualMedian
-// already uses) rather than mixing a quarterly series with an annual one.
-// Only years where both series have real data are plotted.
+// Annual earnings (Dublin-wide, CSO), not paired against sale price on the
+// same chart — CSO's own figure is weekly, and multiplying by 52 to
+// annualise is a plain unit conversion, not new data, but forcing it onto
+// a dual axis next to sale price was a worse chart than two separate ones:
+// property price already has its own trend chart elsewhere on this page,
+// so this doesn't need to repeat it.
 async function loadIncomeChart() {
-  const [incomeRows, quarterlyRows] = await Promise.all([
-    fetchAllRows('income_stats', { select: 'year,statistic,weekly_earnings_eur' }),
-    fetchAllRows('sales_quarterly', { select: '*' }),
-  ]);
-
-  const pricesByYear = new Map();
-  for (const r of quarterlyRows) {
-    const year = r.quarter.slice(0, 4);
-    const arr = pricesByYear.get(year) || [];
-    arr.push(Number(r.median_price));
-    pricesByYear.set(year, arr);
-  }
+  const incomeRows = await fetchAllRows('income_stats', { select: 'year,statistic,weekly_earnings_eur' });
 
   const earningsByYear = new Map();
   for (const r of incomeRows) {
     const entry = earningsByYear.get(r.year) || {};
-    entry[r.statistic] = Number(r.weekly_earnings_eur);
+    entry[r.statistic] = Number(r.weekly_earnings_eur) * 52;
     earningsByYear.set(r.year, entry);
   }
 
-  const years = [...earningsByYear.keys()].filter((y) => pricesByYear.has(String(y))).sort((a, b) => a - b);
+  const years = [...earningsByYear.keys()].sort((a, b) => a - b);
   incomeChartData = years.map((year) => ({
     year,
-    salePrice: medianOfValues(pricesByYear.get(String(year))),
     medianEarnings: earningsByYear.get(year).median,
     meanEarnings: earningsByYear.get(year).mean,
   }));
@@ -1100,33 +1088,16 @@ function renderIncomeChart() {
       labels: incomeChartData.map((d) => String(d.year)),
       datasets: [
         {
-          label: 'Sale price',
-          data: incomeChartData.map((d) => d.salePrice),
-          yAxisID: 'y',
-          borderColor: palette.series1,
-          backgroundColor: palette.series1 + '1a',
-          borderWidth: 2,
-          pointRadius: 0,
-          pointHoverRadius: 5,
-          pointHoverBackgroundColor: palette.series1,
-          pointHoverBorderColor: '#1a1a19',
-          pointHoverBorderWidth: 2,
-          fill: true,
-          tension: 0.15,
-        },
-        {
-          label: 'Weekly earnings',
           data: incomeChartData.map((d) => d[earningsKey]),
-          yAxisID: 'y1',
           borderColor: palette.series2,
+          backgroundColor: palette.series2 + '1a',
           borderWidth: 2,
-          borderDash: [4, 3],
           pointRadius: 0,
           pointHoverRadius: 5,
           pointHoverBackgroundColor: palette.series2,
           pointHoverBorderColor: '#1a1a19',
           pointHoverBorderWidth: 2,
-          fill: false,
+          fill: true,
           tension: 0.15,
         },
       ],
@@ -1136,38 +1107,13 @@ function renderIncomeChart() {
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: {
-          display: true,
-          labels: { color: palette.textMuted, boxWidth: 12, boxHeight: 2, padding: 12 },
-        },
+        legend: { display: false },
         tooltip: {
           ...tooltipBase(),
-          callbacks: {
-            label: (ctx) => (ctx.dataset.yAxisID === 'y1' ? `${eur.format(ctx.parsed.y)}/week` : eur.format(ctx.parsed.y)),
-          },
+          callbacks: { label: (ctx) => eur.format(ctx.parsed.y) },
         },
       },
-      scales: {
-        x: {
-          grid: { color: palette.gridline, display: false },
-          border: { color: palette.baseline },
-          ticks: { color: palette.textMuted },
-        },
-        y: {
-          position: 'left',
-          grid: { color: palette.gridline },
-          border: { display: false },
-          ticks: { color: palette.textMuted, callback: (v) => eurCompact.format(v) },
-          beginAtZero: true,
-        },
-        y1: {
-          position: 'right',
-          grid: { display: false },
-          border: { display: false },
-          ticks: { color: palette.textMuted, callback: (v) => eurCompact.format(v) },
-          beginAtZero: true,
-        },
-      },
+      scales: baseScales(),
     },
   });
 }
