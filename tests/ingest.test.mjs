@@ -1,6 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseDate, parsePrice, derivePostalDistrict } from '../scripts/lib.mjs';
+import { parseDate, parsePrice, derivePostalDistrict, runSanityChecks } from '../scripts/lib.mjs';
+
+// A minimal batch of otherwise-valid rows, sized past the 200,000-row floor,
+// for runSanityChecks tests to mutate a handful of rows in and assert on.
+function validRowBatch(count = 200_001) {
+  return Array.from({ length: count }, (_, i) => ({
+    price: 300000 + i,
+    sale_date: '2025-01-01',
+  }));
+}
 
 test('parseDate converts dd/mm/yyyy to iso', () => {
   assert.equal(parseDate('05/03/2026'), '2026-03-05');
@@ -37,4 +46,36 @@ test('derivePostalDistrict falls back to "Co. Dublin" for county-Dublin rows wit
 
 test('derivePostalDistrict returns null outside county Dublin', () => {
   assert.equal(derivePostalDistrict('Cork', '1 Any Estate, Cork', null), null);
+});
+
+test('runSanityChecks passes a plausible full-sized batch', () => {
+  assert.doesNotThrow(() => runSanityChecks(validRowBatch()));
+});
+
+test('runSanityChecks rejects a suspiciously small batch', () => {
+  assert.throws(() => runSanityChecks(validRowBatch(1000)), /Only 1000 Dublin rows parsed/);
+});
+
+test('runSanityChecks rejects a batch with too many invalid prices', () => {
+  const rows = validRowBatch();
+  for (let i = 0; i < 3000; i++) rows[i].price = NaN; // > 1% of 200,001
+  assert.throws(() => runSanityChecks(rows), /invalid price/);
+});
+
+test('runSanityChecks tolerates a small number of invalid prices', () => {
+  const rows = validRowBatch();
+  rows[0].price = NaN; // well under the 1% threshold
+  assert.doesNotThrow(() => runSanityChecks(rows));
+});
+
+test('runSanityChecks rejects a batch with too many unparseable dates', () => {
+  const rows = validRowBatch();
+  for (let i = 0; i < 3000; i++) rows[i].sale_date = 'not-a-date';
+  assert.throws(() => runSanityChecks(rows), /unparseable sale_date/);
+});
+
+test('runSanityChecks rejects a batch whose latest sale is implausibly far in the future', () => {
+  const rows = validRowBatch();
+  rows[0].sale_date = '2099-01-01';
+  assert.throws(() => runSanityChecks(rows), /implausibly far in the future/);
 });

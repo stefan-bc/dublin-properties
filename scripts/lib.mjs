@@ -36,3 +36,42 @@ export function derivePostalDistrict(county, address, eircode) {
   if (county === 'Dublin') return 'Co. Dublin';
   return null;
 }
+
+// Row-count and data-shape sanity checks, run before anything is written to
+// Supabase. A malformed or truncated source download (PPR changes their CSV
+// format, a network blip returns a partial file, a column gets silently
+// reordered) should fail the ingest workflow loudly rather than upsert
+// corrupt or incomplete data that then quietly poisons every view/chart
+// built on top of it. GitHub emails the repo owner by default when a
+// scheduled Action fails — a thrown error here is the actual alert, not a
+// placeholder for one to wire up later. Returns nothing; throws with every
+// problem found (not just the first) so a single failed run tells you
+// everything wrong in one message.
+export function runSanityChecks(rows) {
+  const errors = [];
+
+  if (rows.length < 200_000) {
+    errors.push(`Only ${rows.length} Dublin rows parsed (expected 200,000+) — source data may be truncated or malformed.`);
+  }
+
+  const invalidPriceCount = rows.filter((r) => !Number.isFinite(r.price) || r.price <= 0).length;
+  if (rows.length && invalidPriceCount / rows.length > 0.01) {
+    errors.push(`${invalidPriceCount} of ${rows.length} rows (${((invalidPriceCount / rows.length) * 100).toFixed(1)}%) have an invalid price — source format may have changed.`);
+  }
+
+  const invalidDateCount = rows.filter((r) => Number.isNaN(new Date(r.sale_date).getTime())).length;
+  if (rows.length && invalidDateCount / rows.length > 0.01) {
+    errors.push(`${invalidDateCount} of ${rows.length} rows have an unparseable sale_date.`);
+  }
+
+  const latestDate = rows.reduce((max, r) => (r.sale_date > max ? r.sale_date : max), '0000-00-00');
+  const oneYearFromNow = new Date();
+  oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
+  if (latestDate > oneYearFromNow.toISOString().slice(0, 10)) {
+    errors.push(`Latest sale_date (${latestDate}) is implausibly far in the future — date parsing may be broken.`);
+  }
+
+  if (errors.length) {
+    throw new Error(`Ingest sanity checks failed:\n- ${errors.join('\n- ')}`);
+  }
+}

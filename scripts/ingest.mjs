@@ -5,7 +5,7 @@ import AdmZip from 'adm-zip';
 import iconv from 'iconv-lite';
 import { parse } from 'csv-parse/sync';
 import { createClient } from '@supabase/supabase-js';
-import { parseDate, parsePrice, derivePostalDistrict } from './lib.mjs';
+import { parseDate, parsePrice, derivePostalDistrict, runSanityChecks } from './lib.mjs';
 
 const PPR_ZIP_URL =
   'https://www.propertypriceregister.ie/website/npsra/ppr/npsra-ppr.nsf/Downloads/PPR-ALL.zip/$FILE/PPR-ALL.zip';
@@ -86,6 +86,7 @@ async function main() {
   const dupeCount = dublinRows.length - dedupedRows.length;
   if (dupeCount > 0) console.log(`Collapsed ${dupeCount} duplicate (date, address, price) rows`);
 
+  runSanityChecks(dedupedRows);
   await upsertBatches(dedupedRows);
   console.log('Done.');
 }
