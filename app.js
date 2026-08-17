@@ -273,7 +273,16 @@ function lerpColor(hexA, hexB, t) {
 Chart.defaults.font.family = '"JetBrains Mono", ui-monospace, monospace';
 Chart.defaults.font.size = 12;
 Chart.defaults.color = palette.textMuted;
-Chart.defaults.animation = { duration: 450, easing: 'easeOutQuart' }; // subtle, quick — not a gimmick
+// Object.assign, not a wholesale reassignment: Chart.js's defaults.animation
+// object carries internal keys (type/fn/from/to/delay/loop) that its own
+// animation-resolution code reads by iterating Object.keys(defaults.animation)
+// — replacing the object drops those keys, so any hover colour-transition
+// animation (e.g. pointHoverBackgroundColor) resolves with no interpolator
+// function, throws on its first tick, and permanently kills Chart.js's one
+// shared animation loop for every chart on the page, not just the one
+// hovered (confirmed live: this was the cause of tooltips silently dying
+// page-wide after the very first hover).
+Object.assign(Chart.defaults.animation, { duration: 450, easing: 'easeOutQuart' }); // subtle, quick — not a gimmick
 
 const RESULT_LIMIT = 200;
 const RECENT_LIMIT = 50;
