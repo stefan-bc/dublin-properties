@@ -44,6 +44,22 @@ async function pg(table, params, { exactCount = false, signal, range } = {}) {
   }
 }
 
+// PostgREST caps a single response at 1000 rows regardless of the
+// requested `limit` (confirmed live against both district_quarterly and
+// rent_index) — any table whose real row count could plausibly exceed that
+// must paginate, not trust one big-limit fetch, or it silently drops
+// whatever didn't fit rather than erroring.
+async function fetchAllRows(table, params, signal) {
+  const rows = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data } = await pg(table, { ...params, limit: '1000', offset: String(offset) }, { signal });
+    const page = data || [];
+    rows.push(...page);
+    if (page.length < 1000) break;
+  }
+  return rows;
+}
+
 const eur = new Intl.NumberFormat('en-IE', {
   style: 'currency',
   currency: 'EUR',
@@ -928,23 +944,7 @@ async function loadMortgageRatesTable() {
 }
 
 async function loadRentIndexTable() {
-  // PostgREST caps a single response at 1000 rows regardless of the
-  // requested `limit` (confirmed live: a limit=2000 request for this
-  // table's real ~1,266 rows came back as content-range 0-999/1266) — a
-  // single fetch would have silently dropped its oldest 266 rows. Paginate
-  // in batches of 1000 until a page comes back short.
-  const rows = [];
-  for (let offset = 0; ; offset += 1000) {
-    const { data } = await pg('rent_index', {
-      select: 'quarter,district,avg_rent_eur',
-      order: 'quarter.desc,district.asc',
-      limit: '1000',
-      offset: String(offset),
-    });
-    const page = data || [];
-    rows.push(...page);
-    if (page.length < 1000) break;
-  }
+  const rows = await fetchAllRows('rent_index', { select: 'quarter,district,avg_rent_eur', order: 'quarter.desc,district.asc' });
   const body = document.getElementById('rent-table-body');
   body.replaceChildren();
   rows.forEach((r, i) => {
@@ -1356,11 +1356,17 @@ async function loadDefaultView() {
 
   if (!defaultViewCache) {
     const signal = viewAbort.signal;
-    const [summaryRes, quarterly, district, districtQuarterlyRes, type, recent, rates] = await Promise.all([
+    const [summaryRes, quarterly, district, districtQuarterlyRows, type, recent, rates] = await Promise.all([
       pg('sales_summary', { select: '*' }, { signal }),
       pg('sales_quarterly', { select: '*' }, { signal }),
       pg('sales_by_district', { select: '*' }, { signal }),
-      pg('district_quarterly', { select: '*' }, { signal }),
+      // Verified live: district_quarterly has 1,540 rows, over PostgREST's
+      // 1000-row response cap, with no natural ordering guaranteeing recent
+      // quarters survive a single truncated fetch — a plain pg() call here
+      // silently dropped roughly half the districts' recent data, showing
+      // them as "no data" on the chart/map for no visible reason. Paginate
+      // the same way loadRentIndexTable already does for the same cap.
+      fetchAllRows('district_quarterly', { select: '*' }, signal),
       pg('sales_by_type', { select: '*' }, { signal }),
       pg('sales', {
         select: SALE_ROW_SELECT,
@@ -1379,7 +1385,7 @@ async function loadDefaultView() {
       summary: summaryRes.data?.[0],
       quarterly: quarterly.data || [],
       district: district.data || [],
-      districtQuarterly: districtQuarterlyRes.data || [],
+      districtQuarterly: districtQuarterlyRows,
       type: type.data || [],
       recent: recent.data || [],
       rateSeries: rates,
