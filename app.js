@@ -937,7 +937,11 @@ async function loadRentIndexTable() {
     tr.appendChild(quarterTd);
 
     const districtTd = document.createElement('td');
-    districtTd.textContent = r.district;
+    // 'Dublin' in this table is the county-wide rollup (see
+    // supabase/schema.sql's rent_index comment), not a real postal
+    // district — sitting next to "Dublin 1", "Dublin 2" etc. it reads as
+    // one more specific place rather than the aggregate it actually is.
+    districtTd.textContent = r.district === 'Dublin' ? 'All Dublin (county-wide)' : r.district;
     tr.appendChild(districtTd);
 
     const rentTd = document.createElement('td');
