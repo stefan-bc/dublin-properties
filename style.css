@@ -459,7 +459,7 @@ a {
   stroke: var(--page);
   stroke-width: 1.5;
   vector-effect: non-scaling-stroke;
-  cursor: pointer;
+  cursor: default;
   transition: filter 120ms ease, stroke-width 120ms ease;
 }
 

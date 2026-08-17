@@ -639,7 +639,6 @@ function renderMap(rows) {
     path.setAttribute('d', (pathDataCache[key] ??= districtPathData(polys, bbox)));
     path.setAttribute('fill-rule', 'evenodd');
     path.setAttribute('tabindex', '0');
-    path.setAttribute('role', 'button');
     path.setAttribute('class', 'district-path');
 
     if (row) {
@@ -652,40 +651,29 @@ function renderMap(rows) {
       path.setAttribute('aria-label', `${label}: no sales recorded`);
     }
 
+    // Click-to-filter was removed: selecting a district here had no way to
+    // deselect from the map itself (no toggle, no "click again" undo) —
+    // only the district dropdown could clear it, which read as the map
+    // being stuck once you'd clicked one. Hover/focus still shows the
+    // tooltip; the map is look-only now.
     if (supportsHover) {
       path.addEventListener('mouseenter', (e) => showMapTooltip(e, label, row?.median_price, row?.sale_count));
       path.addEventListener('mousemove', positionMapTooltip);
       path.addEventListener('mouseleave', hideMapTooltip);
+    } else {
+      path.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (touchPreviewKey === key) {
+          touchPreviewKey = null;
+          hideMapTooltip();
+        } else {
+          touchPreviewKey = key;
+          showMapTooltip(e, label, row?.median_price, row?.sale_count);
+        }
+      });
     }
     path.addEventListener('focus', (e) => showMapTooltip(e, label, row?.median_price, row?.sale_count));
     path.addEventListener('blur', hideMapTooltip);
-
-    const activate = () => {
-      districtFilterActivate(label);
-    };
-
-    if (supportsHover) {
-      path.addEventListener('click', activate);
-    } else {
-      path.addEventListener('click', (e) => {
-        if (touchPreviewKey !== key) {
-          e.preventDefault();
-          touchPreviewKey = key;
-          showMapTooltip(e, label, row?.median_price, row?.sale_count);
-          return;
-        }
-        touchPreviewKey = null;
-        hideMapTooltip();
-        activate();
-      });
-    }
-
-    path.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        activate();
-      }
-    });
 
     svg.appendChild(path);
   }
