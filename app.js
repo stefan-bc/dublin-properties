@@ -878,6 +878,93 @@ function setChartsMode(mode, rows = []) {
   }
 }
 
+const RATE_TYPE_LABELS = {
+  pdh_variable: 'Variable',
+  pdh_tracker: 'Tracker',
+  pdh_fixed_up_to_1y: 'Fixed (up to 1yr)',
+  pdh_fixed_1_3y: 'Fixed (1-3yr)',
+  pdh_fixed_over_3y: 'Fixed (3yr+)',
+  pdh_blended_backfill: 'Blended (ECB backfill)',
+};
+const RATE_SOURCE_LABELS = { cbi: 'Central Bank of Ireland', ecb: 'ECB' };
+
+// Raw browsable views of the two external tables joined in alongside the
+// sales register (see supabase/schema.sql) — both small enough (a few
+// hundred / low thousands of rows) to render in full rather than needing
+// the sales table's incremental-loading machinery. Independent of the
+// search/filter view lifecycle: this data doesn't change with what's
+// searched or filtered, so it's fetched once on initial load, not re-fetched
+// per view.
+async function loadMortgageRatesTable() {
+  const { data } = await pg('mortgage_rates', { select: 'quarter,rate_type,rate_pct,source', order: 'quarter.desc' });
+  const body = document.getElementById('rates-table-body');
+  body.replaceChildren();
+  (data || []).forEach((r, i) => {
+    const tr = document.createElement('tr');
+    tr.style.animationDelay = `${Math.min(i, 12) * 8}ms`;
+
+    const quarterTd = document.createElement('td');
+    quarterTd.textContent = quarterFmt(r.quarter);
+    tr.appendChild(quarterTd);
+
+    const typeTd = document.createElement('td');
+    typeTd.textContent = RATE_TYPE_LABELS[r.rate_type] || r.rate_type;
+    tr.appendChild(typeTd);
+
+    const rateTd = document.createElement('td');
+    rateTd.className = 'num';
+    rateTd.textContent = `${Number(r.rate_pct).toFixed(2)}%`;
+    tr.appendChild(rateTd);
+
+    const sourceTd = document.createElement('td');
+    sourceTd.textContent = RATE_SOURCE_LABELS[r.source] || r.source;
+    tr.appendChild(sourceTd);
+
+    body.appendChild(tr);
+  });
+}
+
+async function loadRentIndexTable() {
+  // PostgREST caps a single response at 1000 rows regardless of the
+  // requested `limit` (confirmed live: a limit=2000 request for this
+  // table's real ~1,266 rows came back as content-range 0-999/1266) — a
+  // single fetch would have silently dropped its oldest 266 rows. Paginate
+  // in batches of 1000 until a page comes back short.
+  const rows = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data } = await pg('rent_index', {
+      select: 'quarter,district,avg_rent_eur',
+      order: 'quarter.desc,district.asc',
+      limit: '1000',
+      offset: String(offset),
+    });
+    const page = data || [];
+    rows.push(...page);
+    if (page.length < 1000) break;
+  }
+  const body = document.getElementById('rent-table-body');
+  body.replaceChildren();
+  rows.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    tr.style.animationDelay = `${Math.min(i, 12) * 8}ms`;
+
+    const quarterTd = document.createElement('td');
+    quarterTd.textContent = quarterFmt(r.quarter);
+    tr.appendChild(quarterTd);
+
+    const districtTd = document.createElement('td');
+    districtTd.textContent = r.district;
+    tr.appendChild(districtTd);
+
+    const rentTd = document.createElement('td');
+    rentTd.className = 'num';
+    rentTd.textContent = eur.format(r.avg_rent_eur);
+    tr.appendChild(rentTd);
+
+    body.appendChild(tr);
+  });
+}
+
 function renderAddressPriceChart(rows) {
   const sorted = [...rows].sort((a, b) => new Date(a.sale_date) - new Date(b.sale_date));
   const ctx = document.getElementById('chart-quarterly');
@@ -1920,3 +2007,5 @@ updateCountdown();
 setInterval(updateCountdown, 1000);
 
 loadInitialView();
+loadMortgageRatesTable();
+loadRentIndexTable();
