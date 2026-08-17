@@ -895,4 +895,12 @@ tbody tr:hover {
     align-items: flex-start;
     gap: 6px;
   }
+
+  /* Heading + segmented control (earnings chart) side by side would cramp
+     or overflow a narrow phone — stack them instead. */
+  .chart-card-head-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
 }
