@@ -284,6 +284,7 @@ Chart.defaults.color = palette.textMuted;
 // page-wide after the very first hover).
 Object.assign(Chart.defaults.animation, { duration: 450, easing: 'easeOutQuart' }); // subtle, quick — not a gimmick
 
+const SALE_ROW_SELECT = 'sale_date,address,postal_district,eircode,property_type,price,size_description,vat_exclusive,not_full_market_price';
 const RESULT_LIMIT = 200;
 const RECENT_LIMIT = 50;
 const RECENT_PAGE_SIZE = 50;
@@ -293,6 +294,11 @@ let recentScrollObserver = null;
 let recentOffset = 0;
 let recentExhausted = false;
 let recentLoadingMore = false;
+// (offset) => params object for pg('sales', params) — set per view by
+// setupRecentInfiniteScroll, so the same loader/eviction machinery below
+// works for both the unfiltered default table and a filtered search's.
+let tableFetchParams = null;
+let tableTrueTotal = null;
 let districtOptions = [];
 let typeOptions = [];
 let addressMatches = [];
@@ -1056,44 +1062,106 @@ function renderTable(rows, cap, trueTotal) {
 function stopRecentInfiniteScroll() {
   recentScrollObserver?.disconnect();
   recentScrollObserver = null;
+  tableFetchParams = null;
+  tableTrueTotal = null;
 }
 
-// No hard cap: keeps paging until a page comes back short (recentExhausted),
-// meaning it's genuinely reached the end of the table, not an arbitrary
-// stopping point. sales is indexed on sale_date, so paging through it is
+// Bounds the live DOM regardless of how far a user scrolls: once the table
+// grows past DOM_WINDOW_MAX rows, the oldest ones at the top are evicted
+// back down to DOM_WINDOW_TRIM_TO, and .table-scroll's own scrollTop is
+// nudged up by exactly the height removed so nothing visibly jumps — the
+// rows currently on screen don't move, only the ones already scrolled past
+// disappear. This is what makes uncapped scrolling in loadMoreRecent safe:
+// the DOM never grows past a few hundred rows no matter how many pages have
+// been fetched. Trade-off: scrolling back up past the evicted point shows a
+// gap rather than re-fetching those rows — one-directional windowing, not a
+// full bidirectional virtualised list.
+const DOM_WINDOW_MAX = 300;
+const DOM_WINDOW_TRIM_TO = 200;
+
+function trimTableWindow() {
+  const body = document.getElementById('table-body');
+  const toRemove = body.children.length - DOM_WINDOW_TRIM_TO;
+  if (body.children.length <= DOM_WINDOW_MAX || toRemove <= 0) return;
+  let removedHeight = 0;
+  for (let i = 0; i < toRemove; i++) {
+    removedHeight += body.firstElementChild.getBoundingClientRect().height;
+    body.firstElementChild.remove();
+  }
+  const scrollEl = document.querySelector('.table-scroll');
+  if (scrollEl) scrollEl.scrollTop -= removedHeight;
+}
+
+// Client-side equivalent of sales_stats' own filter logic (see
+// supabase/schema.sql), used only to page a filtered search PAST what
+// sales_stats itself returns — its rows are capped at RESULT_LIMIT, but the
+// stats/charts above the table are already computed server-side over every
+// match, so paging further doesn't touch those, only the table. Term
+// matching here goes through PostgREST's own ilike/or filter syntax rather
+// than the RPC's carefully %L-quoted SQL, so it's not escaped as robustly —
+// a term containing a literal * would misbehave as a wildcard, an edge case
+// rare enough for an address/Eircode/district search not to warrant a
+// bespoke escaping layer just for this incremental-loading path.
+function buildFilteredPageParams(term, district, typeGroup, includeNonMarket) {
+  return (offset) => {
+    const params = { select: SALE_ROW_SELECT, order: 'sale_date.desc', limit: RECENT_PAGE_SIZE, offset };
+    if (!includeNonMarket) params.not_full_market_price = 'eq.false';
+    if (district) params.postal_district = `eq.${district}`;
+    if (typeGroup) params.property_type = `in.(${typeGroup.values.map((v) => `"${v}"`).join(',')})`;
+    if (term) {
+      const t = term.trim();
+      params.or = `(address.ilike.*${t}*,eircode.ilike.*${t.replace(/\s+/g, '')}*,postal_district.ilike.*${t}*)`;
+    }
+    return params;
+  };
+}
+
+function updateLoadedResultNote(loadedCount, exhausted) {
+  document.getElementById('result-note').textContent =
+    !exhausted && tableTrueTotal
+      ? `${loadedCount.toLocaleString()} of ${tableTrueTotal.toLocaleString()} loaded, keep scrolling for more`
+      : `${loadedCount.toLocaleString()} result${loadedCount === 1 ? '' : 's'}`;
+}
+
+// No hard cap on how far this pages: keeps going until a page comes back
+// short (recentExhausted), meaning it's genuinely reached the end of the
+// match set, not an arbitrary stopping point. sales is indexed on sale_date
+// (and the filtered columns this also queries), so paging through it is
 // cheap at any depth, and the anon key is already publicly queryable that
-// deep regardless — the only real cost is thousands of live <tr> elements
-// if someone scrolls very far, which is a real but much rarer tradeoff than
-// a cap that stops well short of what "infinite scroll" implies.
+// deep regardless — trimTableWindow above is what keeps the actual DOM cost
+// bounded.
 async function loadMoreRecent() {
-  if (recentLoadingMore || recentExhausted) return;
+  if (recentLoadingMore || recentExhausted || !tableFetchParams) return;
   recentLoadingMore = true;
-  const { data } = await pg('sales', {
-    select: 'sale_date,address,postal_district,eircode,property_type,price,size_description,vat_exclusive,not_full_market_price',
-    order: 'sale_date.desc',
-    limit: RECENT_PAGE_SIZE,
-    offset: recentOffset,
-  });
+  const { data } = await pg('sales', tableFetchParams(recentOffset));
   const rows = data || [];
   const body = document.getElementById('table-body');
   rows.forEach((r, i) => body.appendChild(buildTableRow(r, i)));
   recentOffset += rows.length;
-  if (rows.length < RECENT_PAGE_SIZE) {
+  trimTableWindow();
+  const exhausted = rows.length < RECENT_PAGE_SIZE;
+  if (exhausted) {
     recentExhausted = true;
     stopRecentInfiniteScroll();
   }
+  updateLoadedResultNote(recentOffset, exhausted);
   recentLoadingMore = false;
 }
 
-// Infinite scroll for the unfiltered "Recent sales" table only — filtered/
-// address views already show their full server-computed match set up to
-// their own cap (RESULT_LIMIT) and don't need incremental loading. Called
-// fresh each time the default table renders, so returning to it later
-// starts over from the cached first 50 rather than carrying stale scroll
-// state from a previous visit.
-function setupRecentInfiniteScroll() {
+// Infinite scroll shared by the unfiltered "Recent sales" table and a
+// filtered search's results — both are the same table/eviction machinery,
+// just fed a different per-page query. `fetchParamsFn(offset)` builds the
+// pg('sales', ...) params for the next page; `startOffset` is how many rows
+// are already rendered from the initial (non-incremental) fetch; `trueTotal`
+// is the exact match count if known (sales_stats' agg.total for a filtered
+// view), used only for the "X of Y loaded" note. Address view doesn't use
+// this at all — a single address's history is never realistically large
+// enough to need it, see applyResultSet's stopRecentInfiniteScroll() call.
+function setupRecentInfiniteScroll(fetchParamsFn, startOffset, trueTotal = null) {
   stopRecentInfiniteScroll();
-  recentOffset = RECENT_LIMIT;
+  tableFetchParams = fetchParamsFn;
+  tableTrueTotal = trueTotal;
+  recentOffset = startOffset;
   recentExhausted = false;
   recentLoadingMore = false;
   const sentinel = document.getElementById('table-scroll-sentinel');
@@ -1125,7 +1193,7 @@ async function loadDefaultView() {
       pg('sales_by_district', { select: '*' }, { signal }),
       pg('sales_by_type', { select: '*' }, { signal }),
       pg('sales', {
-        select: 'sale_date,address,postal_district,eircode,property_type,price,size_description,vat_exclusive,not_full_market_price',
+        select: SALE_ROW_SELECT,
         order: 'sale_date.desc',
         limit: RECENT_LIMIT,
       }, { signal }),
@@ -1195,7 +1263,10 @@ async function loadDefaultView() {
   renderType(mergeTypeRows(type));
   renderRateOverlay(quarterly, rateSeries);
   renderTable(recent, RECENT_LIMIT);
-  setupRecentInfiniteScroll();
+  setupRecentInfiniteScroll(
+    (offset) => ({ select: SALE_ROW_SELECT, order: 'sale_date.desc', limit: RECENT_PAGE_SIZE, offset }),
+    RECENT_LIMIT,
+  );
 
   districtOptions = district.map((d) => ({
     label: d.postal_district,
@@ -1405,8 +1476,12 @@ async function runFilteredView() {
   }
 
   document.getElementById('table-heading').textContent = buildFilterHeading(term, district, type);
-  stopRecentInfiniteScroll(); // this table is now sales_stats' own capped rows, not the incrementally-loaded default one
   renderTable(agg.rows, RESULT_LIMIT, agg.total);
+  setupRecentInfiniteScroll(
+    buildFilteredPageParams(term, district, typeGroup, includeNonMarket),
+    RESULT_LIMIT,
+    agg.total,
+  );
   applyStatsPayload(agg, rateSeries);
   setViewLoading(false); // clears the initial-load dim if this search overtook it
   setSearchPending(false);
@@ -1428,7 +1503,7 @@ async function runAddressHistory(address) {
   const { data, error, count } = await pg(
     'sales',
     {
-      select: 'sale_date,address,postal_district,eircode,property_type,price,size_description,vat_exclusive,not_full_market_price',
+      select: SALE_ROW_SELECT,
       address: `eq.${address}`,
       order: 'sale_date.desc',
       limit: RESULT_LIMIT,
