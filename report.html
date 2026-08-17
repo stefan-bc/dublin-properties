@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Findings: Dublin Property Prices</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230d0d0d'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='18' font-weight='700' fill='%23ffffff' text-anchor='middle'%3ED%3C/text%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .report-page {
+      max-width: 760px;
+    }
+    /* This page's h1 isn't a click-to-home control like the dashboard's
+       (no JS wired here) — reset the hover/cursor affordance so it doesn't
+       falsely suggest it's clickable. */
+    .report-page .topbar h1 {
+      cursor: default;
+    }
+    .report-page .topbar h1:hover {
+      color: var(--text-primary);
+    }
+    .report-nav {
+      margin-bottom: 24px;
+    }
+    .report-nav a {
+      font-size: 13px;
+    }
+    .report-intro {
+      color: var(--text-secondary);
+      max-width: 65ch;
+      margin: 0 0 40px;
+    }
+    .finding {
+      margin-bottom: 56px;
+      padding-bottom: 56px;
+      border-bottom: 1px solid var(--border);
+    }
+    .finding:last-of-type {
+      border-bottom: none;
+    }
+    .finding-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin: 0 0 8px;
+    }
+    .finding h2 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin: 0 0 16px;
+      line-height: 1.3;
+    }
+    .finding p {
+      color: var(--text-secondary);
+      margin: 0 0 16px;
+      max-width: 65ch;
+    }
+    .finding p:last-of-type {
+      margin-bottom: 0;
+    }
+    .finding-figure {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin: 20px 0;
+      overflow-x: auto;
+    }
+    .finding-figure img {
+      display: block;
+      width: 100%;
+      max-width: 920px;
+      height: auto;
+    }
+    .caveat {
+      font-size: 12px;
+      color: var(--text-muted);
+      border-left: 2px solid var(--border);
+      padding-left: 12px;
+      margin: 20px 0 0;
+    }
+    .methodology {
+      margin-top: 8px;
+    }
+    .methodology h2 {
+      font-size: 16px;
+    }
+    .methodology ul {
+      color: var(--text-secondary);
+      max-width: 65ch;
+      padding-left: 20px;
+      margin: 0 0 16px;
+    }
+    .methodology li {
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page report-page">
+    <p class="report-nav"><a href="index.html">&larr; Back to the dashboard</a></p>
+
+    <header class="topbar">
+      <div class="topbar-main">
+        <h1>What the data actually shows</h1>
+        <p class="subtitle">
+          Three findings from Dublin's property register (2010&ndash;2025), cross-referenced against rent and
+          mortgage rate data. Numbers below are computed live from the same data behind the
+          <a href="index.html">dashboard</a>, not curated to make a point.
+        </p>
+      </div>
+    </header>
+
+    <section class="finding">
+      <p class="finding-label">Finding 1</p>
+      <h2>Renting has actually gotten relatively more expensive than buying, not less</h2>
+      <p>
+        The common assumption is that buying has pulled further out of reach while renting stayed the
+        "affordable" option. The data says the opposite happened. Dublin's price-to-rent ratio (median sale
+        price divided by a year's rent) fell from 21.1 years in 2010 to 18.4 years in 2025, a drop of about
+        13%. That means rents grew faster than sale prices over the period, not the other way round.
+      </p>
+      <div class="finding-figure">
+        <img src="analysis/charts/price-to-rent-trend.svg" alt="Line chart of Dublin's price-to-rent ratio, 2010 to 2025, falling from about 21 years to about 18 years" loading="lazy" />
+      </div>
+      <p>
+        This isn't the same as saying buying got cheaper. Median prices roughly doubled over the same period.
+        Rents just grew even faster off a smaller base, particularly after 2015. The practical read: the
+        "rent to save for a deposit" strategy has gotten measurably harder relative to just buying, if someone
+        was in a position to do either.
+      </p>
+      <p class="caveat">
+        Caveat: Dublin-wide rent figures come from the RTB/CSO rent index, which only publishes district-level
+        detail up to 2021 and a county-wide figure after that (see the rent index table on the dashboard). The
+        trend above uses the county-wide series specifically because it's the only one with continuous
+        coverage through 2025.
+      </p>
+    </section>
+
+    <section class="finding">
+      <p class="finding-label">Finding 2</p>
+      <h2>The cheapest districts in 2010 grew the fastest, not the already-expensive ones</h2>
+      <p>
+        Resale price growth 2010&ndash;2025 by district doesn't track "which areas are desirable now". It
+        tracks the inverse of where prices started. Dublin 10 (Ballyfermot) grew 108%, the most of any
+        district, from a 2010 median of just &euro;157,000. Dublin 1 and Dublin 8, both inner-city, exactly
+        doubled. Meanwhile Dublin 18, Dublin 4, and Dublin 17, three very different areas price-wise, all grew
+        the least (42&ndash;44%), despite having little else in common except already being expensive (Dublin 4,
+        Dublin 18) or already being cheap (Dublin 17) in 2010.
+      </p>
+      <div class="finding-figure">
+        <img src="analysis/charts/district-growth.svg" alt="Horizontal bar chart of resale price growth by Dublin postal district, 2010 to 2025" loading="lazy" />
+      </div>
+      <p>
+        The pattern is a compression, not a reshuffling: districts that started far below the city median
+        grew fastest in percentage terms, closing some of the gap rather than widening it. It doesn't mean the
+        cheapest areas are now expensive in absolute terms, Dublin 10's 2025 median (&euro;327,000) is still
+        well under the city's, but the relative gap narrowed more than most people would guess.
+      </p>
+      <p class="caveat">
+        Caveat: this is percentage growth, which mechanically favours a low starting base, a district going
+        &euro;100k &rarr; &euro;200k reads the same as &euro;400k &rarr; &euro;800k. Districts with under 20
+        resales in either year are excluded to avoid one or two sales swinging the median.
+      </p>
+    </section>
+
+    <section class="finding">
+      <p class="finding-label">Finding 3</p>
+      <h2>New builds sell for a real premium over resales, and it's biggest exactly where you'd expect it not to be</h2>
+      <p>
+        Across Dublin, new-build homes sell for more than resales in the same district and time window
+        (2020&ndash;2025), which isn't surprising on its own. What's less obvious is where the premium is
+        largest: Dublin 1 (+83%), Dublin 7 (+75%), and Dublin 8 (+73%), all dense, older inner-city districts,
+        not the leafy suburbs where a shiny new estate might seem most out of place next to existing housing.
+      </p>
+      <div class="finding-figure">
+        <img src="analysis/charts/newbuild-premium.svg" alt="Horizontal bar chart of the new-build price premium over resales by Dublin postal district, 2020 to 2025" loading="lazy" />
+      </div>
+      <p>
+        The likely explanation isn't "new is worth more", it's what "new" and "resale" actually mean in each
+        area. Inner-city resale stock is disproportionately small, old Georgian or Victorian conversions and
+        older flats, while new-build there tends to mean modern apartment developments, a genuinely different
+        product, not just a newer version of the same one. In suburban districts, new-build and resale housing
+        stock are more similar in type and size, so the premium is smaller.
+      </p>
+      <p class="caveat">
+        Caveat: some districts have very few new-build sales in this window (as low as 17 in Dublin 1), so a
+        single high-value development can move the median. Districts with fewer than 10 sales of either type
+        are excluded from the comparison entirely.
+      </p>
+    </section>
+
+    <section class="methodology">
+      <h2>How this was put together</h2>
+      <ul>
+        <li>All figures computed live from the same Supabase-backed data as the <a href="index.html">dashboard</a>, via <code>analysis/generate-report.mjs</code>, not hand-picked from a spreadsheet.</li>
+        <li>Sale prices: PSRA Residential Property Price Register, full-market-price sales only (gifts and part-transfers excluded, matching the dashboard's default view).</li>
+        <li>Rent: RTB Rent Index via the CSO.</li>
+        <li>Where a figure is an approximation (percentiles, growth rates, combined medians), that's stated in the finding itself, not hidden in a footnote.</li>
+      </ul>
+    </section>
+
+    <footer class="page-footer">
+      Data: PSRA Residential Property Price Register (open data), RTB via CSO, Central Bank of Ireland + ECB. Not affiliated with any of them.
+      Source on <a href="https://github.com/stefan-bc/dublin-properties" target="_blank" rel="noopener">GitHub</a>.
+      Back to the <a href="index.html">dashboard</a>.
+    </footer>
+  </div>
+</body>
+</html>
