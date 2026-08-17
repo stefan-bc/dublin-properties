@@ -530,7 +530,9 @@ a {
   flex: 1 1 auto;
   height: 8px;
   border-radius: 4px;
-  background: linear-gradient(90deg, var(--scale-low), var(--scale-high));
+  /* Low value (left label) to high value (right label) — light to dark,
+     matching renderMap()'s lerpColor call, not the low/high var names. */
+  background: linear-gradient(90deg, var(--scale-high), var(--scale-low));
 }
 
 .map-note,

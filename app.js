@@ -695,7 +695,12 @@ function renderMap(rows) {
 
     if (row) {
       const t = maxPrice === minPrice ? 1 : (row.median_price - minPrice) / (maxPrice - minPrice);
-      path.setAttribute('fill', lerpColor(palette.scaleLow, palette.scaleHigh, t));
+      // scaleHigh at t=0 (cheapest), scaleLow at t=1 (priciest) — not
+      // reversed naming: darker conventionally reads as "more" on a
+      // choropleth, and scaleLow is the dark hex / scaleHigh the light one
+      // (see the --scale-low/--scale-high comment in style.css), so this
+      // is what actually makes price low->high map to light->dark.
+      path.setAttribute('fill', lerpColor(palette.scaleHigh, palette.scaleLow, t));
       path.setAttribute('aria-label', `${label}: ${eur.format(row.median_price)} median, ${row.sale_count} sales`);
     } else {
       path.classList.add('no-data');
