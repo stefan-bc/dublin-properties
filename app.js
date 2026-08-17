@@ -287,13 +287,6 @@ Object.assign(Chart.defaults.animation, { duration: 450, easing: 'easeOutQuart' 
 const RESULT_LIMIT = 200;
 const RECENT_LIMIT = 50;
 const RECENT_PAGE_SIZE = 50;
-// Client-side ceiling on how many "Recent sales" rows infinite scroll will
-// auto-load. Not a backend cost concern — sales is indexed on sale_date, so
-// paging through it is cheap at any depth, and the anon key is already
-// publicly queryable that deep regardless. The real cost is client-side:
-// thousands of live <tr> elements visibly slow the page down over a long
-// scroll session, so this trades unlimited depth for a sane upper bound.
-const RECENT_HARD_CAP = 500;
 
 let quarterlyChart, districtChart, typeChart, rateChart;
 let recentScrollObserver = null;
@@ -1065,14 +1058,15 @@ function stopRecentInfiniteScroll() {
   recentScrollObserver = null;
 }
 
+// No hard cap: keeps paging until a page comes back short (recentExhausted),
+// meaning it's genuinely reached the end of the table, not an arbitrary
+// stopping point. sales is indexed on sale_date, so paging through it is
+// cheap at any depth, and the anon key is already publicly queryable that
+// deep regardless — the only real cost is thousands of live <tr> elements
+// if someone scrolls very far, which is a real but much rarer tradeoff than
+// a cap that stops well short of what "infinite scroll" implies.
 async function loadMoreRecent() {
   if (recentLoadingMore || recentExhausted) return;
-  if (recentOffset >= RECENT_HARD_CAP) {
-    document.getElementById('result-note').textContent =
-      `Showing the first ${RECENT_HARD_CAP.toLocaleString()} sales. Search or filter to see more.`;
-    stopRecentInfiniteScroll();
-    return;
-  }
   recentLoadingMore = true;
   const { data } = await pg('sales', {
     select: 'sale_date,address,postal_district,eircode,property_type,price,size_description,vat_exclusive,not_full_market_price',
