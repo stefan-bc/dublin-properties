@@ -550,6 +550,28 @@ a {
   text-decoration: underline;
 }
 
+/* Marks the boundary between the actual PPR sale register (search, charts,
+   map, table above) and the supplementary rate/rent data below it — a plain
+   .chart-card/.table-card heading reads as just another card among many;
+   this is meant to read as a different kind of section, not one more card. */
+.section-divider {
+  border-top: 1px solid var(--border);
+  padding-top: 28px;
+  margin: 8px 0 24px;
+}
+
+.section-divider h2 {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 6px;
+}
+
+.section-divider .table-hint {
+  margin: 0;
+  max-width: 70ch;
+}
+
 .table-card {
   background: var(--surface);
   border: 1px solid var(--border);
