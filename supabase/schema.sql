@@ -320,8 +320,10 @@ create policy "public read access" on rent_index
 
 grant select on rent_index to anon, authenticated;
 
--- Weekly earnings, Dublin-wide (CSO table NEA06, Revenue PAYE administrative
--- data, "Both sexes"). Annual, not quarterly like the rest of this project —
+-- Gross weekly earnings, Dublin-wide (CSO table NEA06, Revenue PAYE
+-- administrative data, "Both sexes"): CSO's own methodology page confirms
+-- weekly earnings = gross annual earnings declared to Revenue / weeks
+-- worked, i.e. pre-tax. Annual, not quarterly like the rest of this project —
 -- income statistics are published once a year, roughly 7 months after the
 -- year ends. County-level only: real Dublin postal-district income data
 -- doesn't exist (verified against CSO's own PxStat API before building
