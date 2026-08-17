@@ -286,6 +286,7 @@ const palette = {
   textMuted: '#898781',
   series1: '#3987e5',
   series2: '#199e70',
+  series3: '#d4a72c',
   // Sequential choropleth scale — mirrors the --scale-low/--scale-high CSS
   // vars in style.css (same duplication pattern as the rest of this object;
   // Chart.js/SVG colour options need real values, not custom-property refs).
@@ -1089,12 +1090,12 @@ function renderIncomeChart() {
       datasets: [
         {
           data: incomeChartData.map((d) => d[earningsKey]),
-          borderColor: palette.series2,
-          backgroundColor: palette.series2 + '1a',
+          borderColor: palette.series3,
+          backgroundColor: palette.series3 + '1a',
           borderWidth: 2,
           pointRadius: 0,
           pointHoverRadius: 5,
-          pointHoverBackgroundColor: palette.series2,
+          pointHoverBackgroundColor: palette.series3,
           pointHoverBorderColor: '#1a1a19',
           pointHoverBorderWidth: 2,
           fill: true,
