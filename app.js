@@ -295,7 +295,7 @@ const RESULT_LIMIT = 200;
 const RECENT_LIMIT = 50;
 const RECENT_PAGE_SIZE = 50;
 
-let quarterlyChart, districtChart, typeChart, rateChart;
+let quarterlyChart, districtChart, typeChart, rateChart, rentChart;
 let recentScrollObserver = null;
 let recentOffset = 0;
 let recentExhausted = false;
@@ -968,6 +968,52 @@ async function loadRentIndexTable() {
     tr.appendChild(rentTd);
 
     body.appendChild(tr);
+  });
+  renderRentChart(rows.filter((r) => r.district === 'Dublin'));
+}
+
+// The county-wide 'Dublin' rollup, not any single postal district: RTB/CSO
+// stopped publishing district-level rent after ~2021 (confirmed live while
+// building the price-to-rent analysis — every individual district's last
+// quarter caps out there), so only 'Dublin' has a continuous, current
+// quarterly series worth charting as a trend. Individual-district figures
+// are still in the table above, just dated.
+function renderRentChart(dublinWideRows) {
+  const sorted = [...dublinWideRows].sort((a, b) => a.quarter.localeCompare(b.quarter));
+  const ctx = document.getElementById('chart-rent');
+  rentChart = upsertChart(rentChart, ctx, {
+    type: 'line',
+    data: {
+      labels: sorted.map((r) => quarterFmt(r.quarter)),
+      datasets: [
+        {
+          data: sorted.map((r) => Math.round(r.avg_rent_eur)),
+          borderColor: palette.series2,
+          backgroundColor: palette.series2 + '1a',
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: palette.series2,
+          pointHoverBorderColor: '#1a1a19',
+          pointHoverBorderWidth: 2,
+          fill: true,
+          tension: 0.15,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          ...tooltipBase(),
+          callbacks: { label: (ctx) => eur.format(ctx.parsed.y) },
+        },
+      },
+      scales: baseScales({ x: { ticks: { maxTicksLimit: 10, color: palette.textMuted } } }),
+    },
   });
 }
 

@@ -414,6 +414,17 @@ a {
   min-width: 0;
 }
 
+/* .charts-grid supplies its own margin-bottom for chart-cards inside it —
+   a chart-card used standalone (outside that grid, like .map-card) needs
+   its own, same as .map-card gets below. */
+.standalone-chart-card {
+  margin-bottom: 24px;
+}
+
+.standalone-chart-card canvas {
+  max-height: 320px;
+}
+
 .chart-card h2 {
   font-size: 13px;
   font-weight: 600;
@@ -445,7 +456,10 @@ a {
 
 .map-wrap {
   position: relative;
-  max-width: 480px;
+  /* Roughly matches the ~380px canvas height the charts above use (the
+     district geometry's bbox is close to square, slightly taller than
+     wide) — was 480px, rendering noticeably larger than everything else. */
+  max-width: 360px;
   margin: 0 auto;
 }
 
