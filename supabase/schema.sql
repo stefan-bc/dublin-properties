@@ -319,3 +319,32 @@ create policy "public read access" on rent_index
   using (true);
 
 grant select on rent_index to anon, authenticated;
+
+-- Weekly earnings, Dublin-wide (CSO table NEA06, Revenue PAYE administrative
+-- data, "Both sexes"). Annual, not quarterly like the rest of this project —
+-- income statistics are published once a year, roughly 7 months after the
+-- year ends. County-level only: real Dublin postal-district income data
+-- doesn't exist (verified against CSO's own PxStat API before building
+-- this) and there's no official crosswalk from the finer geography that
+-- does exist (Electoral Divisions) to Eircode routing keys, so a
+-- district-level figure would require an approximation this project
+-- doesn't make. 'statistic' is 'mean' or 'median' — CSO publishes both, so
+-- the dashboard can toggle between them rather than picking one silently.
+create table if not exists income_stats (
+  year integer not null,
+  statistic text not null,          -- 'mean' | 'median'
+  weekly_earnings_eur numeric(8,2) not null,
+  source text not null default 'cso_nea06',
+  primary key (year, statistic)
+);
+
+create index if not exists income_stats_year_idx on income_stats (year);
+
+alter table income_stats enable row level security;
+
+drop policy if exists "public read access" on income_stats;
+create policy "public read access" on income_stats
+  for select
+  using (true);
+
+grant select on income_stats to anon, authenticated;

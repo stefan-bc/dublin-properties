@@ -435,6 +435,46 @@ a {
   max-height: 320px;
 }
 
+.chart-card-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.chart-card-head-row h2 {
+  margin: 0;
+}
+
+.segmented-control {
+  display: flex;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.segmented-option {
+  background: var(--page);
+  color: var(--text-muted);
+  border: none;
+  padding: 6px 12px;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.segmented-option + .segmented-option {
+  border-left: 1px solid var(--border);
+}
+
+.segmented-option.is-active {
+  background: var(--series-1);
+  color: #ffffff;
+}
+
 .chart-card h2 {
   font-size: 13px;
   font-weight: 600;

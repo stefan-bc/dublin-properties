@@ -140,12 +140,26 @@
 
     <div class="section-divider">
       <h2>Market context</h2>
-      <p class="table-hint">Mortgage rates and rents, for context alongside the sale register above. Not part of the PPR register itself.</p>
+      <p class="table-hint">Mortgage rates, rents, and earnings, for context alongside the sale register above. Not part of the PPR register itself.</p>
     </div>
 
     <div class="chart-card standalone-chart-card">
       <h2>Average rent, Dublin-wide, by quarter</h2>
       <canvas id="chart-rent" role="img" aria-label="Line chart of average monthly rent, Dublin-wide, by quarter"></canvas>
+    </div>
+
+    <div class="chart-card standalone-chart-card">
+      <div class="chart-card-head-row">
+        <h2>Weekly earnings vs property price, Dublin, by year</h2>
+        <div class="segmented-control" role="group" aria-label="Earnings statistic">
+          <button type="button" id="income-stat-median" class="segmented-option is-active" aria-pressed="true">Median</button>
+          <button type="button" id="income-stat-mean" class="segmented-option" aria-pressed="false">Mean</button>
+        </div>
+      </div>
+      <canvas id="chart-income" role="img" aria-label="Line chart comparing Dublin weekly earnings against annual median sale price"></canvas>
+      <p class="table-hint">
+        Weekly earnings: CSO, Revenue PAYE administrative data, Dublin-wide (annual; no Dublin postal-district breakdown exists).
+      </p>
     </div>
 
     <section class="tables-grid">

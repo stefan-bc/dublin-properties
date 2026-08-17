@@ -2,7 +2,7 @@ name: Ingest external market data
 
 on:
   schedule:
-    - cron: '0 6 1 * *'  # 06:00 UTC on the 1st of every month — both sources update quarterly
+    - cron: '0 6 1 * *'  # 06:00 UTC on the 1st of every month — rates/rent update quarterly, income annually
   workflow_dispatch: {}
 
 jobs:
@@ -19,6 +19,10 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       - run: npm run ingest:rent
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      - run: npm run ingest:income
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
