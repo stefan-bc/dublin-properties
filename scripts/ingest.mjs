@@ -9,7 +9,11 @@ import { parseDate, parsePrice, derivePostalDistrict, runSanityChecks } from './
 
 const PPR_ZIP_URL =
   'https://www.propertypriceregister.ie/website/npsra/ppr/npsra-ppr.nsf/Downloads/PPR-ALL.zip/$FILE/PPR-ALL.zip';
-const BATCH_SIZE = 1000;
+// Kept well under PostgREST's 8s statement_timeout: each upsert touches 3 GIN
+// trigram indexes on `sales`, which get markedly slower under autovacuum contention.
+const BATCH_SIZE = 250;
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 2000;
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -59,12 +63,27 @@ function toSaleRow(record) {
   };
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function upsertBatch(batch, batchNum) {
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const { error } = await supabase.from('sales').upsert(batch, { onConflict: 'id' });
+    if (!error) return;
+    if (attempt === MAX_RETRIES) {
+      throw new Error(`Upsert failed at batch ${batchNum} after ${MAX_RETRIES} attempts: ${error.message}`);
+    }
+    console.log(`Batch ${batchNum} attempt ${attempt} failed (${error.message}), retrying...`);
+    await sleep(RETRY_DELAY_MS * attempt);
+  }
+}
+
 async function upsertBatches(rows) {
   let upserted = 0;
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE);
-    const { error } = await supabase.from('sales').upsert(batch, { onConflict: 'id' });
-    if (error) throw new Error(`Upsert failed at batch ${i / BATCH_SIZE}: ${error.message}`);
+    await upsertBatch(batch, i / BATCH_SIZE);
     upserted += batch.length;
     console.log(`Upserted ${upserted}/${rows.length}`);
   }
