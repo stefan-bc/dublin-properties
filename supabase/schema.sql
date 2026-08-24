@@ -120,7 +120,7 @@ language plpgsql
 stable
 as $$
 begin
-  perform set_config('pg_trgm.word_similarity_threshold', '0.2', true);
+  perform set_config('pg_trgm.word_similarity_threshold', '0.4', true);
   -- Terms under three characters have too few trigrams to mean anything (a
   -- bare "d" would match nearly every address) — refuse them here rather
   -- than return a flood of noise; district suggestions already cover short
