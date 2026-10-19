@@ -21,7 +21,9 @@ Live at [dublin.ectoplasma.org](https://dublin.ectoplasma.org).
 - **Data pipeline.** A scheduled GitHub Action downloads the official
   register every Monday, cleans it up (encoding fixes, address parsing,
   deduplication) and loads it into Postgres. It's safe to re-run: rows are
-  updated in place, never duplicated.
+  updated in place, never duplicated. A small keepalive job in the same
+  workflow re-enables the scheduled workflows each week, so GitHub never
+  switches them off for inactivity.
 - **Database.** Supabase Postgres. Pre-computed views and two SQL functions
   handle search and filtering server-side, so the browser never has to churn
   through a quarter of a million rows itself.
